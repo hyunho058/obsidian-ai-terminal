@@ -508,6 +508,10 @@ export abstract class View extends Component {
   async onOpen(): Promise<void> {}
   async onClose(): Promise<void> {}
   onResize(): void {}
+  getEphemeralState(): Record<string, unknown> {
+    return {};
+  }
+  setEphemeralState(_state: unknown): void {}
 }
 
 export abstract class ItemView extends View {
@@ -601,6 +605,14 @@ export class Workspace extends Events {
   layoutReady = true;
   /** Test inspection: calls to openLinkText. */
   openedLinks: Array<{ linktext: string; sourcePath: string; newLeaf?: unknown; state?: unknown }> = [];
+  /** Test inspection: calls to requestSaveLayout. */
+  layoutSaveRequests = 0;
+  requestSaveLayout: (() => void) & { cancel(): void; run(): void } = Object.assign(
+    () => {
+      this.layoutSaveRequests++;
+    },
+    { cancel: () => {}, run: () => {} },
+  );
   private layoutCallbacks: Array<() => any> = [];
 
   constructor(public app: App) {

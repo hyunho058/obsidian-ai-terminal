@@ -24,3 +24,20 @@
 .ai-terminal-container .xterm-viewport {
   overscroll-behavior: contain;
 }
+
+/* T3 — terminal panel. The xterm theme uses --background-primary (src/terminal/theme.ts); match it around the grid. */
+.ai-terminal-container {
+  background-color: var(--background-primary);
+}
+
+/* Breathing room around the grid; the fit addon subtracts this padding when computing columns / rows. */
+.ai-terminal-container .xterm {
+  padding: 4px 2px 0 8px;
+  box-sizing: border-box;
+}
+
+.ai-terminal-container .xterm:focus,
+.ai-terminal-container .xterm textarea:focus {
+  outline: none;
+  box-shadow: none;
+}
