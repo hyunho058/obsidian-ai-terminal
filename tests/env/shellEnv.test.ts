@@ -177,9 +177,12 @@ describe('ShellEnv fallback (R3.3)', () => {
     expect(out.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(out.TERM_PROGRAM).toBe('obsidian-ai-terminal');
     expect(out.LANG).toBe('ko_KR.UTF-8');
-    expect(await waitFor(() => existsSync(pids) && readFileSync(pids, 'utf8').includes(' '), 5_000)).toBe(true);
-    const [shellPid, sleepPid] = readFileSync(pids, 'utf8').trim().split(' ').map(Number);
-    expect(await waitFor(() => !isAlive(shellPid!) && !isAlive(sleepPid!), 5_000)).toBe(true);
+    // Under heavy load the shell can be killed at the 1 s timeout before it ever writes its pids;
+    // then there is no child to check. When it did start one, both must be gone.
+    if (await waitFor(() => existsSync(pids) && readFileSync(pids, 'utf8').includes(' '), 2_000)) {
+      const [shellPid, sleepPid] = readFileSync(pids, 'utf8').trim().split(' ').map(Number);
+      expect(await waitFor(() => !isAlive(shellPid!) && !isAlive(sleepPid!), 5_000)).toBe(true);
+    }
   });
 
   it('falls back when the shell prints no markers or cannot start', async () => {

@@ -232,6 +232,10 @@ Done when: the plugin is installed in the user's vault; from inside Obsidian the
 - **Status**: assumed (L2 review; revised after L2 review ×2)
 - **Rationale**: A `SessionRegistry` keyed by `panelId` owns each helper process, its state (`starting | running | exited`) and a **headless terminal mirror** (`@xterm/headless` 6.0.0) fed with all program output and resized together with the PTY on every resize (so lines wrap at the same width); the mirror's own replies to terminal queries are discarded (the visible xterm answers them). A view attaches to its session on open and detaches on close. Detach starts a 2 s grace timer: if a view with the same `panelId` attaches within it (drag to another split / window, view re-creation), the new view's xterm is first sized to the mirror's size and restored from it with `@xterm/addon-serialize` 0.14 (screen, scrollback and terminal modes — bracketed paste, application cursor keys, mouse tracking, alt screen), then fitted to the new view and a redraw is forced by resizing one column smaller and back (same-size `TIOCSWINSZ` sends no SIGWINCH) — no restart, no snapshot, no lost reply; otherwise the session is stopped (D8). Every spawn waits for the plugin's ready signal (shell env captured, bridge servers listening, stale lock files cleaned, agy entry ensured). Rejected: the view owning the process (any view re-creation kills the reply in progress); replaying a raw output ring buffer (loses terminal modes whose escape sequences scrolled out, can start mid-sequence → multi-line paste submits line by line, arrow keys break); re-parenting the xterm element (breaks across popout windows, which have their own `document`).
 
+### D35: One-time hint to show Claude's edit diffs in the terminal
+- **Status**: resolved (user decision during implementation, 2026-10-07)
+- **Rationale**: T7 found (Claude Code 2.1.292) that while Claude is connected to an IDE and its global setting `diffTool` is `"auto"` (the default — unset counts as auto), Claude hides the edit diff in the terminal ("Opened changes in Obsidian ⧉") and sends it to the IDE's `openDiff`; Yes/No still work in the terminal. `diffTool` exists only in Claude's global config, with no env or `--settings` override. User chose a one-time hint: before the first Claude panel in a vault starts with the IDE connection on, the plugin reads Claude's global config read-only (`~/.claude.json`, or `$CLAUDE_CONFIG_DIR/.claude.json`); if `diffTool` is not `"terminal"`, the panel prints once: `Tip: to see Claude's edit diffs here, run /config → Diff tool → terminal (one time).` The hint is remembered per vault (`settings.moduleData`) and never repeated; the plugin never writes Claude's config. Rejected: implementing `openDiff` as a read-only diff tab in Obsidian (undocumented protocol, more work); accepting hidden diffs.
+
 ## Constraints
 - macOS + Obsidian desktop only; `manifest.json` `isDesktopOnly: true`.
 - No native Node modules (no `node-pty`) — the plugin must load on Obsidian's Electron without rebuilding anything.
@@ -657,7 +661,7 @@ Done when: the plugin is installed in the user's vault; from inside Obsidian the
 - **Then**: the port is closed
 
 ### R10: Claude Code IDE connection
-**Covers**: D27(a), D29, D30, D23
+**Covers**: D27(a), D29, D30, D23, D35
 
 #### R10.1: Lock file is written with the right fields
 - **Given**: `ideConnectionEnabled` = true
@@ -684,10 +688,15 @@ Done when: the plugin is installed in the user's vault; from inside Obsidian the
 - **When**: the user clicks into the Claude panel
 - **Then**: no empty `selection_changed` is sent and the selection indicator stays
 
-#### R10.6: Diffs stay in the terminal
-- **Given**: Claude is connected to Obsidian
+#### R10.6: Diffs stay in the terminal (with Claude's Diff tool = terminal)
+- **Given**: Claude is connected to Obsidian and Claude's `diffTool` setting is `terminal`
 - **When**: Claude proposes an edit to `X.md`
-- **Then**: the diff and the permission prompt appear in the terminal, and no `openDiff` request is answered by the plugin
+- **Then**: the diff and the permission prompt appear in the terminal, and the plugin answers no `openDiff` request
+
+#### R10.11: One-time Diff tool hint
+- **Given**: the IDE connection is on, Claude's global config has no `diffTool` or `diffTool` ≠ `terminal`, and the hint was never shown in this vault
+- **When**: the first Claude panel starts
+- **Then**: the panel prints `Tip: to see Claude's edit diffs here, run /config → Diff tool → terminal (one time).` once; later Claude panels in this vault don't print it; Claude's config file is unchanged (byte-identical)
 
 #### R10.7: Stale Obsidian lock files are removed, others are kept
 - **Given**: `~/.claude/ide/` has a lock file with `ideName: "Obsidian"` and a dead pid, and a lock file of another IDE
@@ -957,7 +966,7 @@ Done when: the plugin is installed in the user's vault; from inside Obsidian the
 - **Scope**: `src/bridge/state.ts` (last-note-editor tracking, selection while blurred, open notes, links), `src/bridge/tools.ts` (5 tools, vault-relative path validation), `src/bridge/httpServer.ts` (127.0.0.1, random port, bearer token, Streamable HTTP via MCP SDK, `addRoute`), `src/bridge/claudeMcpContributor.ts` (`--mcp-config` inline JSON).
 
 ### T7: Claude Code IDE connection [vertical]
-- **Fulfills**: R0.4, R10, R11.1 (`--ide` + `CLAUDE_CODE_SSE_PORT` part)
+- **Fulfills**: R0.4, R10 (incl. R10.11 added with D35), R11.1 (`--ide` + `CLAUDE_CODE_SSE_PORT` part)
 - **Depends on**: T6 — parallel with T8, T9
 - **Scope**: `src/bridge/ideServer.ts` (WebSocket MCP server, token check, `selection_changed` debounced 300 ms from `state.ts`, no diff / tab methods), `src/bridge/lockFile.ts` (write 0600, remove on unload, stale-Obsidian cleanup only), `src/bridge/claudeIdeContributor.ts`. First step: verify lock-file fields, auth header and `selection_changed` payload against Claude Code 2.1.290 and prior-art plugins (Known Gap).
 

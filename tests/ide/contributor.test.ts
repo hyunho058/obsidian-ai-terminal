@@ -50,4 +50,26 @@ describe('claude IDE contributor (R10.3, R11.1)', () => {
     ep.resolveStart();
     expect(await pending).toEqual({ args: ['--ide'], env: { CLAUDE_CODE_SSE_PORT: '4567' } });
   });
+
+  it('adds the one-time hint as a notice, and never asks for it when contributing nothing', async () => {
+    let asked = 0;
+    const hint = async () => (asked++, 'Tip: x');
+    expect(await createClaudeIdeContributor(() => endpoint('running'), { hint })(ctx('claude'))).toEqual({
+      args: ['--ide'],
+      env: { CLAUDE_CODE_SSE_PORT: '4567' },
+      notice: 'Tip: x',
+    });
+    expect(asked).toBe(1);
+    await createClaudeIdeContributor(() => undefined, { hint })(ctx('claude'));
+    await createClaudeIdeContributor(() => endpoint('stopped'), { hint })(ctx('claude'));
+    await createClaudeIdeContributor(() => endpoint('running'), { hint })(ctx('agy'));
+    expect(asked).toBe(1);
+  });
+
+  it('a failing hint never blocks the spawn', async () => {
+    const hint = async (): Promise<string | undefined> => {
+      throw new Error('boom');
+    };
+    expect(await createClaudeIdeContributor(() => endpoint('running'), { hint })(ctx('claude'))).toEqual({ args: ['--ide'], env: { CLAUDE_CODE_SSE_PORT: '4567' } });
+  });
 });

@@ -1,10 +1,12 @@
 import type { FeatureModule, PluginContext } from '../core';
 import { notice, type Logger } from '../util/log';
 import { createClaudeIdeContributor, type IdeEndpoint } from './claudeIdeContributor';
+import { claudeGlobalConfigFile, createDiffToolHint } from './ideDiffHint';
 import { IdeServer, type SelectionSource } from './ideServer';
 import { IDE_NAME, cleanStaleLockFiles, ideLockDir, isPidAlive, removeLockFile, workspaceFoldersFor, writeLockFile } from './lockFile';
 
 export { IDE_FLAG, SSE_PORT_ENV, createClaudeIdeContributor, type IdeEndpoint } from './claudeIdeContributor';
+export { DIFF_TOOL_HINT, claudeGlobalConfigFile, createDiffToolHint, readClaudeDiffTool } from './ideDiffHint';
 export { IDE_AUTH_HEADER, IDE_SERVER_NAME, IdeServer, selectionChangedParams, type SelectionChangedParams } from './ideServer';
 export { IDE_NAME, cleanStaleLockFiles, ideLockDir, isPidAlive, removeLockFile, writeLockFile, type IdeLockContent } from './lockFile';
 
@@ -184,7 +186,19 @@ export function createIdeModule(options: IdeModuleOptions = {}): FeatureModule {
       const connection = new IdeConnection(server, { lockDir: lockDir(), vaultPath: ctx.vaultPath, pid: options.pid ?? process.pid, log });
       conn = connection;
       ctx.services.provide('ide', connection);
-      ctx.spawn.add('ide:claude', createClaudeIdeContributor(() => (ctx.settings.ideConnectionEnabled && conn === connection ? connection : undefined)));
+      const hint = createDiffToolHint({
+        isShown: () => ideData(ctx).diffHintShown === true,
+        markShown: async () => {
+          ctx.settings.moduleData.ide = { ...ideData(ctx), diffHintShown: true };
+          await ctx.saveSettings();
+        },
+        configFile: () => claudeGlobalConfigFile(spawnEnv(ctx), ctx.vaultPath),
+        log,
+      });
+      ctx.spawn.add(
+        'ide:claude',
+        createClaudeIdeContributor(() => (ctx.settings.ideConnectionEnabled && conn === connection ? connection : undefined), { hint }),
+      );
       ctx.onSettingsChange((s, prev) => {
         if (s.ideConnectionEnabled === prev.ideConnectionEnabled || ctx.unloading) return;
         if (s.ideConnectionEnabled) void enable(ctx, log);
@@ -214,4 +228,24 @@ export function createIdeModule(options: IdeModuleOptions = {}): FeatureModule {
       conn = null;
     },
   };
+}
+
+/** Per-vault IDE module state in `settings.moduleData.ide`. */
+interface IdeModuleData {
+  /** The one-time Diff tool hint (R10.11) was printed in this vault. */
+  diffHintShown?: boolean;
+}
+
+function ideData(ctx: PluginContext): IdeModuleData {
+  const data = ctx.settings.moduleData.ide;
+  return data && typeof data === 'object' && !Array.isArray(data) ? (data as IdeModuleData) : {};
+}
+
+/** The environment Claude will see (login-shell layer), so `$CLAUDE_CONFIG_DIR` from the user's profile counts. */
+function spawnEnv(ctx: PluginContext): Readonly<Record<string, string | undefined>> {
+  try {
+    return ctx.services.get('shellEnv')?.getSpawnEnv() ?? process.env;
+  } catch {
+    return process.env;
+  }
 }

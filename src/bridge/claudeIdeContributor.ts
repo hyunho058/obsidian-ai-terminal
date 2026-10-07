@@ -1,4 +1,4 @@
-import type { SpawnContributor } from '../core';
+import type { SpawnContribution, SpawnContributor } from '../core';
 
 /**
  * Port of the IDE server for this session. With it set, Claude Code picks the lock file with that port (skipping the
@@ -17,11 +17,17 @@ export interface IdeEndpoint {
   whenListening(): Promise<void>;
 }
 
+export interface ClaudeIdeContributorOptions {
+  /** One-time Diff tool hint (R10.11): resolves to the notice for this spawn, or undefined. Must not throw. */
+  hint?: () => Promise<string | undefined>;
+}
+
 /**
  * Spawn contributor for Claude panels (R10.3, R11.1): `--ide` + `CLAUDE_CODE_SSE_PORT=<port>`, so each panel connects to
- * its own vault's server. `getEndpoint` returns undefined while the IDE connection is turned off (R10.10).
+ * its own vault's server, plus the one-time Diff tool hint as a notice. `getEndpoint` returns undefined while the IDE
+ * connection is turned off (R10.10).
  */
-export function createClaudeIdeContributor(getEndpoint: () => IdeEndpoint | undefined): SpawnContributor {
+export function createClaudeIdeContributor(getEndpoint: () => IdeEndpoint | undefined, options: ClaudeIdeContributorOptions = {}): SpawnContributor {
   return async (c) => {
     if (c.profile !== 'claude') return;
     const endpoint = getEndpoint();
@@ -29,10 +35,13 @@ export function createClaudeIdeContributor(getEndpoint: () => IdeEndpoint | unde
     if (!endpoint.isRunning() && !(await listensWithin(endpoint, START_WAIT_MS))) return;
     const port = endpoint.port;
     if (port === null) return;
-    return {
+    const contribution: SpawnContribution = {
       args: c.baseArgs.includes(IDE_FLAG) ? [] : [IDE_FLAG],
       env: { [SSE_PORT_ENV]: String(port) },
     };
+    const notice = await options.hint?.().catch(() => undefined);
+    if (notice) contribution.notice = notice;
+    return contribution;
   };
 }
 
