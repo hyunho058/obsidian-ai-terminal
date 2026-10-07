@@ -108,6 +108,15 @@ class HookTest(unittest.TestCase):
         body = json.loads(req["body"].decode("utf-8"))
         self.assertEqual(body, {"panelId": "panel-1", "prompt": prompt[:200], "ai": "claude"})
 
+    def test_bridge_token_in_the_prompt_is_redacted_before_the_cut(self):
+        # The token straddles the 200-character limit: cutting first would send a recognisable token prefix.
+        prompt = "x" * 190 + TOKEN + " tail"
+        r = self.run_hook(self.env(), self.hook_input(prompt))
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, b"", b""))
+        sent = json.loads(Recorder.requests[0]["body"].decode("utf-8"))["prompt"]
+        self.assertEqual(sent, ("x" * 190 + "[REDACTED] tail")[:200])
+        self.assertNotIn(TOKEN[:8], sent)
+
     def test_missing_env_exits_immediately_without_request(self):
         for missing in ("OBSIDIAN_BRIDGE_URL", "OBSIDIAN_BRIDGE_TOKEN"):
             env = self.env()

@@ -141,10 +141,11 @@ class Session implements SessionHandle {
     if (!this.disposed) this.deliver(data);
   }
 
+  /** Local text (notices, notes, failure lines) — secrets are redacted here, so no caller can print a token. */
   print(text: string): void {
     if (this.disposed) return;
     this.clearStarting();
-    this.output(text);
+    this.output(redact(text));
   }
 
   holdInput(): () => void {

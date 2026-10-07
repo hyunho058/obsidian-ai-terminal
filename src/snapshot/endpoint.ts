@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { isAiProfile, type RouteHandler, type TerminalPanelHandle } from '../core';
-import type { Logger } from '../util/log';
+import { redact, type Logger } from '../util/log';
 import { NOTES, TRAILER_PROMPT_CHARS } from './messages';
 import type { SnapshotAi, SnapshotResult, SnapshotsService } from './types';
 
@@ -60,7 +60,8 @@ export function createSnapshotRoute(o: SnapshotRouteOptions): RouteHandler {
     const input = parsed as Record<string, unknown>;
     const panelId = typeof input.panelId === 'string' && input.panelId ? input.panelId.slice(0, 200) : undefined;
     const ai: SnapshotAi = input.ai === 'agy' ? 'agy' : 'claude';
-    const prompt = typeof input.prompt === 'string' ? Array.from(input.prompt).slice(0, TRAILER_PROMPT_CHARS).join('') : undefined;
+    // Redact before cutting, so a secret cut at the limit cannot survive as a prefix.
+    const prompt = typeof input.prompt === 'string' ? Array.from(redact(input.prompt)).slice(0, TRAILER_PROMPT_CHARS).join('') : undefined;
 
     const panel = panelId ? o.getPanel(panelId) : undefined;
     if (panel && !isAiProfile(panel.profile)) {

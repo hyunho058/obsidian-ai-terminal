@@ -11,6 +11,7 @@ Obsidian) it does nothing. Python standard library only, Python >= 3.9.
 import json
 import os
 import sys
+import urllib.parse
 import urllib.request
 
 TIMEOUT_S = 10.0
@@ -18,6 +19,7 @@ MAX_PROMPT_CHARS = 200
 URL_ENV = "OBSIDIAN_BRIDGE_URL"
 TOKEN_ENV = "OBSIDIAN_BRIDGE_TOKEN"
 PANEL_ENV = "OBSIDIAN_PANEL_ID"
+REDACTED = "[REDACTED]"
 
 
 def build_request(base_url, token, panel_id, prompt):
@@ -30,13 +32,19 @@ def build_request(base_url, token, panel_id, prompt):
     )
 
 
-def read_prompt(stream):
+def read_prompt(stream, token=""):
     try:
         data = json.loads(stream.read().decode("utf-8", "replace"))
     except Exception:
         return ""
     prompt = data.get("prompt") if isinstance(data, dict) else None
-    return prompt[:MAX_PROMPT_CHARS] if isinstance(prompt, str) else ""
+    if not isinstance(prompt, str):
+        return ""
+    # Redact before cutting: a token cut in half at the limit could no longer be recognised by the plugin.
+    if token:
+        for form in (token, urllib.parse.quote(token, safe="")):
+            prompt = prompt.replace(form, REDACTED)
+    return prompt[:MAX_PROMPT_CHARS]
 
 
 def main(env=None, stdin=None):
@@ -45,7 +53,7 @@ def main(env=None, stdin=None):
     token = env.get(TOKEN_ENV, "")
     if not base_url or not token:
         return
-    prompt = read_prompt(stdin if stdin is not None else sys.stdin.buffer)
+    prompt = read_prompt(stdin if stdin is not None else sys.stdin.buffer, token)
     request = build_request(base_url, token, env.get(PANEL_ENV, ""), prompt)
     # The bridge is on 127.0.0.1: never route it through a proxy from the environment.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
