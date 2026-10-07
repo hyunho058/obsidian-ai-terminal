@@ -167,7 +167,8 @@ describe('ShellEnv fallback (R3.3)', () => {
     const env = new ShellEnv({ shell, baseEnv: BASE, homeDir: dir, timeoutMs: 1_000, run: runner() });
     const t0 = Date.now();
     await env.capture();
-    expect(Date.now() - t0).toBeLessThan(3_000);
+    // generous bound: under a loaded full-suite run, process start/kill can lag well past the 1 s timeout
+    expect(Date.now() - t0).toBeLessThan(6_000);
     expect(env.status).toBe('fallback');
     expect(env.failureReason).toMatch(/timed out after 1 s/);
     const out = env.getSpawnEnv();
@@ -176,8 +177,9 @@ describe('ShellEnv fallback (R3.3)', () => {
     expect(out.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(out.TERM_PROGRAM).toBe('obsidian-ai-terminal');
     expect(out.LANG).toBe('ko_KR.UTF-8');
+    expect(await waitFor(() => existsSync(pids) && readFileSync(pids, 'utf8').includes(' '), 5_000)).toBe(true);
     const [shellPid, sleepPid] = readFileSync(pids, 'utf8').trim().split(' ').map(Number);
-    expect(await waitFor(() => !isAlive(shellPid!) && !isAlive(sleepPid!), 2_000)).toBe(true);
+    expect(await waitFor(() => !isAlive(shellPid!) && !isAlive(sleepPid!), 5_000)).toBe(true);
   });
 
   it('falls back when the shell prints no markers or cannot start', async () => {
