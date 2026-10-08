@@ -57,6 +57,8 @@ export interface TerminalPanelHandle {
 export interface FeatureModule {
   /** Short id used in logs, e.g. `pty`. */
   readonly id: string;
+  /** Plain name shown to the user if this part fails to load, e.g. "snapshots". Without it the Notice stays generic. */
+  readonly label?: string;
   register(ctx: PluginContext): void | Promise<void>;
   ready?(ctx: PluginContext): Promise<void>;
   unload?(ctx: PluginContext): void | Promise<void>;

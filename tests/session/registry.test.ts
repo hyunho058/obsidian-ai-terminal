@@ -392,6 +392,37 @@ describe('SessionRegistry — resize, reattach, grace, duplicates', () => {
     expect(h.registry.list().map((s) => s.panelId)).toEqual(['p1']);
   });
 
+  it('a view taking over a session gets its current conversation id when it changed since that view saved its state', async () => {
+    const h = await harness();
+    const a = new FakeSink('a');
+    h.registry.attach({ panelId: 'p1', profile: 'claude', sessionId: 'conv-old', phase: 'restore', sink: a });
+    await waitFor(() => h.registry.get('p1')?.state === 'running');
+    // A resume picks a new id; the attached view is told (and persists it).
+    h.registry.setSessionId('p1', 'conv-new');
+    expect(a.identities).toEqual([{ panelId: 'p1', sessionId: 'conv-new' }]);
+
+    // Old view first: it detaches, a new view (restored from a layout saved before the change) attaches.
+    h.registry.detach('p1', a);
+    const b = new FakeSink('b');
+    expect(h.registry.attach({ panelId: 'p1', profile: 'claude', sessionId: 'conv-old', phase: 'restore', sink: b })).toBe('reattached');
+    expect(b.identities).toEqual([{ panelId: 'p1', sessionId: 'conv-new' }]);
+
+    // New view first: the id changes while the move is pending; the view that takes over gets it.
+    const c = new FakeSink('c');
+    expect(h.registry.attach({ panelId: 'p1', profile: 'claude', sessionId: 'conv-new', phase: 'restore', sink: c })).toBe('pending');
+    h.registry.setSessionId('p1', 'conv-3');
+    h.registry.detach('p1', b);
+    await waitFor(() => c.restores.length === 1);
+    expect(c.identities).toEqual([{ panelId: 'p1', sessionId: 'conv-3' }]);
+
+    // Same id → nothing to push.
+    h.registry.detach('p1', c);
+    const d = new FakeSink('d');
+    h.registry.attach({ panelId: 'p1', profile: 'claude', sessionId: 'conv-3', phase: 'restore', sink: d });
+    expect(d.identities).toEqual([]);
+    expect(h.pty.spawned).toHaveLength(1);
+  });
+
   it('a view still open after the window is a duplicate: the new view gets a new panelId and a fresh session (R6.5)', async () => {
     const h = await harness();
     h.ctx.spawn.add('sid', (c) => ({ sessionId: c.sessionId ?? `fresh-${c.panelId}` }));

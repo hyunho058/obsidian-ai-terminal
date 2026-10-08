@@ -48,6 +48,40 @@ describe('commands and ribbon (D1–D3, R1.1–R1.4)', () => {
     expect(new Set(h.sessions.list().map((s) => s.panelId)).size).toBe(3);
   });
 
+  it('"Open Claude Code" puts keyboard focus into the new right-sidebar terminal (R1.3)', async () => {
+    h = await makeViewHarness();
+    const harness = h;
+    // Obsidian keeps every leaf's view in the window's DOM; the mock does not, so attach each new view's container.
+    const create = h.app.viewCreators.get(TERMINAL_VIEW_TYPE)!;
+    const attached: HTMLElement[] = [];
+    h.app.viewCreators.set(TERMINAL_VIEW_TYPE, (leaf) => {
+      const view = create(leaf);
+      document.body.appendChild(view.containerEl);
+      attached.push(view.containerEl);
+      return view;
+    });
+    try {
+      (document.activeElement as HTMLElement | null)?.blur();
+      expect(document.activeElement).toBe(document.body);
+      h.plugin.commands.find((c) => c.name === 'Open Claude Code')!.callback!();
+      await waitFor(() => harness.pty.calls.length === 1);
+      const leaves = h.app.workspace.getLeavesOfType(TERMINAL_VIEW_TYPE);
+      expect(leaves).toHaveLength(1);
+      expect(leaves[0]!.side).toBe('right');
+      const view = leaves[0]!.view as unknown as TerminalView;
+      expect(view.profile).toBe('claude');
+      const textarea = view.terminal!.textarea!;
+      await waitFor(() => document.activeElement === textarea);
+      expect(view.containerEl.contains(document.activeElement)).toBe(true);
+      // Typing now goes to the program without a click.
+      await waitFor(() => view.session?.state === 'running');
+      view.terminal!.input('hi');
+      expect(harness.pty.last.input()).toBe('hi');
+    } finally {
+      for (const el of attached) el.remove();
+    }
+  });
+
   it('the ribbon icon shows a profile menu and opens the picked profile (R1.2)', async () => {
     h = await makeViewHarness();
     expect(h.plugin.ribbonIcons).toHaveLength(1);

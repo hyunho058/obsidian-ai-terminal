@@ -201,6 +201,12 @@ describe('AiTerminalSettingTab (R14.1, R14.2)', () => {
     expect((byName('AI session snapshots') as DropdownComponent).getValue()).toBe('ask');
   });
 
+  it('the Bridge tools toggle is described in plain words (no MCP / token jargon)', () => {
+    render();
+    const bridge = Setting.created.find((s) => s.name === 'Bridge tools')!;
+    expect(bridge.desc).toBe('Let the AI read your open note and selection.');
+  });
+
   it('edits persist and survive a reload', async () => {
     const { plugin, store, byName } = render();
     await (byName('Placement') as DropdownComponent).simulateChange('new-tab');

@@ -83,6 +83,7 @@ export function createPtyModule(options: PtyModuleOptions = {}): FeatureModule {
 
   return {
     id: 'pty',
+    label: 'the terminal helper',
     register(ctx) {
       const log = ctx.log.child('pty');
       const pythonResolver = new PythonResolver({

@@ -33,13 +33,14 @@ export interface AgyModuleOptions extends Pick<AgyConfigOptions, 'run' | 'lockSt
   recheckDelayMs?: number;
 }
 
-const foreignNotice = (command: string): string =>
-  `AI Terminal: Antigravity already has an MCP server named "obsidian" that this plugin did not create (${command}). ` +
-  'It was left unchanged, so agy cannot use the Obsidian bridge. Remove it with `agy mcp remove obsidian` and reload the plugin.';
+/** Says only that a foreign entry exists — never its command / URL / headers (they may hold secrets). */
+export const FOREIGN_ENTRY_NOTICE =
+  'AI Terminal: Antigravity already has another MCP server named "obsidian", so agy cannot use the bridge. ' +
+  'Run `agy mcp remove obsidian` and reload the plugin.';
 
 /**
  * T8 — Antigravity bridge (D28): installs `mcp_shim.py` to its stable path, keeps the global agy entry
- * `obsidian` → `<python3> <shim>` (under the lock file; idempotent), removes it when `agyBridgeEnabled` is turned off,
+ * `obsidian` → `<python3> -I <shim>` (under the lock file; idempotent), removes it when `agyBridgeEnabled` is turned off,
  * and gives agy panels `OBSIDIAN_BRIDGE_URL` / `OBSIDIAN_BRIDGE_TOKEN`. Service: `agyBridge`.
  */
 export function createAgyModule(options: AgyModuleOptions = {}): FeatureModule {
@@ -48,6 +49,7 @@ export function createAgyModule(options: AgyModuleOptions = {}): FeatureModule {
 
   return {
     id: 'agy',
+    label: 'the Antigravity bridge',
     register(ctx) {
       const log = ctx.log.child('agy');
       const shimPath = ctx.supportScripts.register(SHIM_SCRIPT);
@@ -97,7 +99,7 @@ export function createAgyModule(options: AgyModuleOptions = {}): FeatureModule {
         },
         ensure: async () => {
           const outcome = await ensure();
-          if (outcome.status === 'foreign') notice(foreignNotice(outcome.command), 15_000);
+          if (outcome.status === 'foreign') notice(FOREIGN_ENTRY_NOTICE, 15_000);
           return outcome;
         },
         remove,
@@ -178,7 +180,7 @@ function logOutcome(log: Logger, action: string, outcome: EnsureOutcome | Remove
       log.debug(`agy entry "obsidian" ${outcome.status}`);
       break;
     case 'foreign':
-      log.warn(`agy ${action}: an "obsidian" entry not created by this plugin exists (${outcome.command}); left unchanged`);
+      log.warn(`agy ${action}: an "obsidian" entry not created by this plugin exists; left unchanged`);
       break;
     case 'skipped':
       if (outcome.reason === AGY_NOT_FOUND) log.info(`agy ${action} skipped: ${outcome.reason}`);
@@ -192,7 +194,7 @@ function logOutcome(log: Logger, action: string, outcome: EnsureOutcome | Remove
 
 function noticeAfterToggleOn(outcome: EnsureOutcome): void {
   if (outcome.status === 'skipped' && outcome.reason === AGY_NOT_FOUND) {
-    notice('AI Terminal: the Antigravity CLI (agy) was not found — check its command in Settings › Profiles. The agy bridge entry was not added.');
+    notice('AI Terminal: the Antigravity CLI (agy) was not found — check its command in Settings › Profiles.');
   } else if (outcome.status === 'failed') {
     notice('AI Terminal: could not add the "obsidian" MCP server to Antigravity — see the developer console.');
   }

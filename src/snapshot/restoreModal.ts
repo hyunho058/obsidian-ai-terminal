@@ -1,7 +1,7 @@
 import { Modal, View, type App } from 'obsidian';
 import type { SessionHandle, SessionsService } from '../session/types';
-import { openModalIn } from '../terminal/closeFlow';
 import { notice, type Logger } from '../util/log';
+import { openModalIn } from '../util/modal';
 import { formatTimestamp } from './messages';
 import {
   abortedMessage,

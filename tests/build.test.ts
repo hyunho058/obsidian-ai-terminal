@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { assertNoNativeModules, buildOptions, copyStaticFiles, EXTERNALS, findSupportScripts, isSupportScript } from '../esbuild.config.mjs';
@@ -44,6 +44,29 @@ describe('support script selection', () => {
       'src/bridge/mcp_shim.py',
       'src/pty/pty_bridge.py',
     ]);
+  });
+});
+
+describe('the real project (R16.1)', () => {
+  const SUPPORT_SCRIPTS = ['mcp_shim.py', 'pty_bridge.py', 'snapshot_hook.py'];
+
+  it('ships exactly the three support scripts from src/', () => {
+    expect(findSupportScripts().map((f: string) => basename(f)).sort()).toEqual(SUPPORT_SCRIPTS);
+  });
+
+  it('the static-copy step of `npm run build` writes manifest.json, styles.css and the three scripts', () => {
+    const out = mkdtempSync(join(tmpdir(), 'dist-'));
+    expect(copyStaticFiles({ outDir: out }).sort()).toEqual(SUPPORT_SCRIPTS);
+    expect(readdirSync(out).sort()).toEqual(['manifest.json', ...SUPPORT_SCRIPTS, 'styles.css'].sort());
+    expect(readFileSync(join(out, 'manifest.json'), 'utf8')).toBe(readFileSync(join(ROOT, 'manifest.json'), 'utf8'));
+    const css = readFileSync(join(out, 'styles.css'), 'utf8');
+    expect(css).toContain('.xterm');
+    expect(css).toContain(readFileSync(join(ROOT, 'styles.css'), 'utf8'));
+    for (const name of SUPPORT_SCRIPTS) {
+      const source = findSupportScripts().find((f: string) => basename(f) === name)!;
+      expect(readFileSync(join(out, name), 'utf8')).toBe(readFileSync(source, 'utf8'));
+    }
+    expect(() => assertNoNativeModules(out)).not.toThrow();
   });
 });
 
@@ -99,10 +122,10 @@ describe('manifest (R2.10)', () => {
     expect(m.author).toBeTruthy();
   });
 
-  it('dist/ (if built) has the required files and no native modules', () => {
+  it('dist/ (if built) holds exactly main.js, manifest.json, styles.css and the three scripts — no native modules (R16.1)', () => {
     const dist = join(ROOT, 'dist');
     if (!existsSync(join(dist, 'main.js'))) return;
-    for (const f of ['main.js', 'manifest.json', 'styles.css']) expect(existsSync(join(dist, f))).toBe(true);
+    expect(readdirSync(dist).sort()).toEqual(['main.js', 'manifest.json', 'mcp_shim.py', 'pty_bridge.py', 'snapshot_hook.py', 'styles.css']);
     expect(() => assertNoNativeModules(dist)).not.toThrow();
   });
 });

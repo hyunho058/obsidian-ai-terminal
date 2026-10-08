@@ -15,6 +15,7 @@ export function createCloseFlowModule(options: CloseFlowModuleOptions = {}): Fea
   let flow: CloseFlow | null = null;
   return {
     id: 'close-flow',
+    label: 'close confirmation',
     register(ctx) {
       const terminals = ctx.services.require('terminals');
       const current = new CloseFlow({

@@ -42,6 +42,7 @@ export function createTerminalModule(): FeatureModule {
   let tearingDown = false;
   return {
     id: 'terminal',
+    label: 'terminal panels',
     register(ctx) {
       const sessions = ctx.services.require('sessions');
       const views = new Set<TerminalView>();

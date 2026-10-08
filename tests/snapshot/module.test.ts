@@ -84,7 +84,7 @@ function spawnCtx(profile: ProfileId, baseArgs: string[] = []): SpawnContext {
 
 function post(url: string, body: string, token?: string): Promise<{ status: number; json: Record<string, unknown> }> {
   return new Promise((resolvePost, reject) => {
-    const req = http.request(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) } }, (res) => {
+    const req = http.request(url, { method: 'POST', agent: false, headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', ...(token ? { Authorization: `Bearer ${token}` } : {}) } }, (res) => {
       const chunks: Buffer[] = [];
       res.on('data', (c: Buffer) => chunks.push(c));
       res.on('end', () => {
@@ -96,6 +96,21 @@ function post(url: string, body: string, token?: string): Promise<{ status: numb
     req.end(body);
   });
 }
+
+/** Runs a hook command like Claude Code does (`sh -c`, JSON on stdin) without blocking the event loop serving the bridge. */
+function runHook(command: string, env: Record<string, string>, input: string): Promise<{ code: number | null; out: string; err: string }> {
+  return new Promise((done) => {
+    const child = spawn('/bin/sh', ['-c', command], { env: { ...process.env, ...env } });
+    let out = '';
+    let err = '';
+    child.stdout.on('data', (d: Buffer) => (out += d));
+    child.stderr.on('data', (d: Buffer) => (err += d));
+    child.on('close', (code) => done({ code, out, err }));
+    child.stdin.end(input);
+  });
+}
+
+const MCP_INIT = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } } });
 
 function snapshotUrl(rt: Runtime): string {
   return `${rt.ctx.services.require('bridgeServer').baseUrl}/snapshot`;
@@ -370,18 +385,7 @@ describe('POST /snapshot (R12.3, R12.4, R12.9, R12.10)', () => {
     const settings = JSON.parse(plan.args.find((a) => a.startsWith('--settings='))!.slice('--settings='.length));
     const hook = settings.hooks.UserPromptSubmit[0].hooks[0];
     const input = JSON.stringify({ session_id: 's', hook_event_name: 'UserPromptSubmit', cwd: rt.vault, prompt: 'make this shorter' });
-    const env = { ...process.env, ...plan.env };
-    // Hook runs while the event loop keeps serving the bridge: spawn asynchronously.
-    const result = await new Promise<{ code: number | null; out: string; err: string }>((done) => {
-      const child = spawn('/bin/sh', ['-c', hook.command], { env });
-      let out = '';
-      let err = '';
-      child.stdout.on('data', (d: Buffer) => (out += d));
-      child.stderr.on('data', (d: Buffer) => (err += d));
-      child.on('close', (code) => done({ code, out, err }));
-      child.stdin.end(input);
-    });
-    expect(result).toEqual({ code: 0, out: '', err: '' });
+    expect(await runHook(hook.command, plan.env, input)).toEqual({ code: 0, out: '', err: '' });
     const [snap] = await rt.service.list();
     expect(snap!.subject).toMatch(/^Before Claude Code: "make this shorter" — /);
     expect(snap!.panelId).toBe('panel-7');
@@ -411,10 +415,10 @@ describe('Claude --settings contributor (R11.1)', () => {
     for (const f of ['.claude.json', '.claude']) expect(existsSync(join(homedir(), f))).toBe(false);
   });
 
-  it('no hook when snapshots are off, the bridge is off, or the user passes their own --settings', async () => {
+  it('no hook when snapshots are off, without the bridge module, or when the user passes their own --settings', async () => {
     const off = await load({ enabled: false });
     expect((await off.ctx.spawn.resolve(spawnCtx('claude'))).args.some((a) => a.startsWith('--settings'))).toBe(false);
-    const noBridge = await load({ bridgeEnabled: false });
+    const noBridge = await load({ bridge: false });
     expect((await noBridge.ctx.spawn.resolve(spawnCtx('claude'))).args.some((a) => a.startsWith('--settings'))).toBe(false);
     const own = await load();
     const plan = await own.ctx.spawn.resolve(spawnCtx('claude', ['--settings', '/my/settings.json']));
@@ -435,6 +439,95 @@ describe('Claude --settings contributor (R11.1)', () => {
     expect(readFileSync(marker, 'utf8')).toBe('ok');
     expect(shellQuote('/usr/bin/python3')).toBe('/usr/bin/python3');
     expect(shellQuote("a b'c")).toBe(`'a b'\\''c'`);
+  });
+});
+
+describe('bridge tools off, snapshots on (deviation 19)', () => {
+  const has = (args: string[], flag: string) => args.some((a) => a.startsWith(flag));
+
+  it('the server keeps running for /snapshot only: /mcp refused, /snapshot with the token commits, Claude gets --settings but no --mcp-config', async () => {
+    const panel = fakePanel('claude', 'panel-1');
+    const rt = await load({ bridgeEnabled: false, panels: [panel] });
+    const server = rt.ctx.services.require('bridgeServer');
+    expect(server.isRunning()).toBe(true);
+    expect(server.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    expect((await post(`${server.baseUrl}/mcp`, MCP_INIT)).status).toBe(401);
+    expect((await post(`${server.baseUrl}/mcp`, MCP_INIT, TOKEN)).status).toBe(404);
+    const body = JSON.stringify({ panelId: 'panel-1', prompt: 'tools are off', ai: 'claude' });
+    expect((await post(snapshotUrl(rt), body)).status).toBe(401);
+    const ok = await post(snapshotUrl(rt), body, TOKEN);
+    expect(ok.json).toMatchObject({ status: 'committed' });
+    expect((await rt.service.list())[0]!.subject).toMatch(/^Before Claude Code: "tools are off" — /);
+
+    const plan = await rt.ctx.spawn.resolve(spawnCtx('claude', ['--model', 'sonnet']));
+    expect(plan.args.slice(0, 2)).toEqual(['--model', 'sonnet']);
+    expect(has(plan.args, '--settings=')).toBe(true);
+    expect(has(plan.args, '--mcp-config')).toBe(false);
+    // The hook contributor alone brings everything the hook needs.
+    expect(plan.env).toEqual({ [PANEL_ID_ENV]: 'panel-7', OBSIDIAN_BRIDGE_URL: server.baseUrl, OBSIDIAN_BRIDGE_TOKEN: TOKEN });
+    expect(plan.args.join(' ')).not.toContain(TOKEN);
+  });
+
+  it('end to end: the real hook script snapshots through the /snapshot-only server', async () => {
+    const panel = fakePanel('claude', 'panel-7');
+    const rt = await load({ bridgeEnabled: false, panels: [panel], withHook: true });
+    await rt.ctx.supportScripts.whenInstalled();
+    const plan = await rt.ctx.spawn.resolve(spawnCtx('claude'));
+    const settings = JSON.parse(plan.args.find((a) => a.startsWith('--settings='))!.slice('--settings='.length));
+    const input = JSON.stringify({ session_id: 's', hook_event_name: 'UserPromptSubmit', cwd: rt.vault, prompt: 'bridge off' });
+    expect(await runHook(settings.hooks.UserPromptSubmit[0].hooks[0].command, plan.env, input)).toEqual({ code: 0, out: '', err: '' });
+    const [snap] = await rt.service.list();
+    expect(snap).toMatchObject({ kind: 'prompt', ai: 'claude', panelId: 'panel-7', promptExcerpt: 'bridge off' });
+  });
+
+  it('"not asked yet" keeps the server too (the hook is passed, deviation 8)', async () => {
+    const rt = await load({ bridgeEnabled: false, enabled: null });
+    expect(rt.ctx.services.require('bridgeServer').isRunning()).toBe(true);
+    expect(has((await rt.ctx.spawn.resolve(spawnCtx('claude'))).args, '--settings=')).toBe(true);
+  });
+
+  it('both off → no server, no hook, no --mcp-config; each toggle starts / stops the server', async () => {
+    const rt = await load({ bridgeEnabled: false, enabled: false });
+    const server = rt.ctx.services.require('bridgeServer');
+    expect(server.isRunning()).toBe(false);
+    const off = await rt.ctx.spawn.resolve(spawnCtx('claude'));
+    expect(off.args).toEqual([]);
+    expect(off.env).toEqual({});
+
+    rt.ctx.settings.snapshots.enabled = true;
+    await rt.ctx.saveSettings();
+    await server.whenListening();
+    expect((await post(`${server.baseUrl}/mcp`, MCP_INIT, TOKEN)).status).toBe(404);
+    const on = await rt.ctx.spawn.resolve(spawnCtx('claude'));
+    expect([has(on.args, '--settings='), has(on.args, '--mcp-config')]).toEqual([true, false]);
+    await rt.service.whenIdle(); // the first full snapshot started by turning snapshots on
+
+    rt.ctx.settings.snapshots.enabled = false;
+    await rt.ctx.saveSettings();
+    expect(server.isRunning()).toBe(false);
+
+    rt.ctx.settings.bridgeEnabled = true;
+    await rt.ctx.saveSettings();
+    await server.whenListening();
+    const tools = await rt.ctx.spawn.resolve(spawnCtx('claude'));
+    expect([has(tools.args, '--settings='), has(tools.args, '--mcp-config=')]).toEqual([false, true]);
+    expect((await post(`${server.baseUrl}/mcp`, MCP_INIT, TOKEN)).status).toBe(200);
+
+    rt.ctx.settings.bridgeEnabled = false;
+    await rt.ctx.saveSettings();
+    expect(server.isRunning()).toBe(false);
+  });
+
+  it('bridge on → unchanged: one server for /mcp and /snapshot, Claude gets both flags', async () => {
+    const rt = await load();
+    const server = rt.ctx.services.require('bridgeServer');
+    expect((await post(`${server.baseUrl}/mcp`, MCP_INIT, TOKEN)).status).toBe(200);
+    const plan = await rt.ctx.spawn.resolve(spawnCtx('claude'));
+    expect([has(plan.args, '--settings='), has(plan.args, '--mcp-config=')]).toEqual([true, true]);
+    // Turning only snapshots off keeps the server for the tools.
+    rt.ctx.settings.snapshots.enabled = false;
+    await rt.ctx.saveSettings();
+    expect(server.isRunning()).toBe(true);
   });
 });
 

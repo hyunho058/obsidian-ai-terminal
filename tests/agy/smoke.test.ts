@@ -69,9 +69,9 @@ describe.skipIf(!SMOKE || !existsSync(AGY))('smoke: real agy under a temp HOME',
     const [a, b] = [make(), make()];
     const outcomes = await Promise.all([a.ensureEntry(PY, shim), b.ensureEntry(PY, shim)]);
     expect(outcomes.map((o) => o.status).sort()).toEqual(['added', 'unchanged']);
-    expect(adds).toEqual([['mcp', 'add', 'obsidian', '--', PY, shim]]);
+    expect(adds).toEqual([['mcp', 'add', 'obsidian', '--', PY, '-I', shim]]);
     const listed = parseMcpList(agy('mcp', 'list').out)!;
-    expect(listed.find((e) => e.name === 'obsidian')).toEqual({ name: 'obsidian', type: 'stdio', status: 'enabled', command: `${PY} ${shim}` });
+    expect(listed.find((e) => e.name === 'obsidian')).toEqual({ name: 'obsidian', type: 'stdio', status: 'enabled', command: `${PY} -I ${shim}` });
     expect(others()).toEqual(before);
     expect(readFileSync(cfgPath, 'utf8')).toContain(DUMMY_SECRET);
 

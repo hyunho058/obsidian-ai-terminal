@@ -1,11 +1,25 @@
 // @vitest-environment happy-dom
+import { Terminal, type ILink } from '@xterm/xterm';
+import { randomUUID } from 'node:crypto';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { App, Plugin } from 'obsidian';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_VIEW_TYPE } from '../../src/core';
-import { WorkspaceLeaf } from '../mocks/obsidian';
-import { FakeSink, sleep, waitFor } from '../session/helpers';
+import { PluginRuntime } from '../../src/core/runtime';
+import { createSessionModule } from '../../src/session/index';
+import { SettingsStore } from '../../src/settings';
+import { createCloseFlowModule } from '../../src/terminal/closeFlowModule';
+import { createTerminalModule } from '../../src/terminal/index';
+import { createKeyboardModule } from '../../src/terminal/keyboardModule';
+import { createLogger } from '../../src/util/log';
+import { createManifest, createMockApp, Plugin as MockPlugin, View, WorkspaceLeaf, type ViewState } from '../mocks/obsidian';
+import { FakePtyService, FakeSink, sleep, waitFor } from '../session/helpers';
 import { bufferText, FAST, flushTerm, makeViewHarness, stubFit, viewOf, type ViewHarness } from './helpers';
 
 let h: ViewHarness | null = null;
+let deferredRuntime: PluginRuntime | null = null;
 
 beforeEach(() => {
   document.body.className = '';
@@ -14,8 +28,84 @@ beforeEach(() => {
 afterEach(() => {
   h?.runtime.unload();
   h = null;
+  deferredRuntime?.unload();
+  deferredRuntime = null;
   vi.restoreAllMocks();
 });
+
+/** Obsidian's placeholder for a tab that has not been shown yet (`DeferredView`): same type name, not the plugin's class. */
+class DeferredPlaceholder extends View {
+  constructor(
+    leaf: WorkspaceLeaf,
+    private readonly saved: ViewState,
+  ) {
+    super(leaf);
+  }
+  getViewType(): string {
+    return this.saved.type;
+  }
+  getDisplayText(): string {
+    return 'Claude Code';
+  }
+  getState(): Record<string, unknown> {
+    return { ...this.saved.state };
+  }
+}
+
+/**
+ * Obsidian startup with a saved layout: the workspace is not ready yet when the plugin loads; the plugin's view-related
+ * modules (sessions, terminals, keyboard, close flow) over a fake PTY. Leaves can be added before `start()`.
+ */
+async function startDeferred() {
+  const vault = mkdtempSync(join(tmpdir(), 'vault-'));
+  const app = createMockApp(vault);
+  app.workspace.layoutReady = false;
+  const plugin = new (class extends MockPlugin {})(app, createManifest());
+  const store = new SettingsStore((d) => plugin.saveData(d));
+  store.load(null);
+  const runtime = new PluginRuntime({
+    app: app as unknown as App,
+    plugin: plugin as unknown as Plugin,
+    settingsStore: store,
+    vaultPath: vault,
+    pluginDir: vault,
+    log: createLogger(undefined, { debug() {}, info() {}, warn() {}, error() {} }),
+  });
+  deferredRuntime = runtime;
+  const pty = new FakePtyService();
+  const phases: Array<[string, string | undefined, string]> = [];
+  const result = {
+    app,
+    runtime,
+    pty,
+    phases,
+    get sessions() {
+      return runtime.ctx.services.require('sessions');
+    },
+    get terminals() {
+      return runtime.ctx.services.require('terminals');
+    },
+    async start() {
+      plugin.load();
+      await runtime.start([
+        {
+          id: 'fake-pty',
+          register(ctx) {
+            ctx.services.provide('pty', pty);
+          },
+        },
+        createSessionModule(FAST),
+        createTerminalModule(),
+        createKeyboardModule(),
+        createCloseFlowModule(),
+      ]);
+      runtime.ctx.sessionEvents.beforeSpawn((c) => {
+        phases.push([c.phase, c.sessionId, c.panelId]);
+      });
+    },
+  };
+  return result;
+}
 
 async function setup(opts: { gated?: boolean } = {}): Promise<ViewHarness> {
   h = await makeViewHarness(opts);
@@ -85,6 +175,58 @@ describe('TerminalView', () => {
     expect(harness.sessions.list()).toEqual([]);
     await leaf.setViewState({ type: TERMINAL_VIEW_TYPE, state: { profile: 'shell', panelId: 'bg' } });
     await waitFor(() => harness.pty.calls.length === 1);
+  });
+
+  it('a panel restored into a background tab spawns nothing at startup, only when its tab is first shown (R5.9)', async () => {
+    const r = await startDeferred();
+    const saved: ViewState = { type: TERMINAL_VIEW_TYPE, state: { profile: 'claude', panelId: 'bg', sessionId: randomUUID() } };
+    const leaf = new WorkspaceLeaf(r.app, 'right');
+    // Obsidian 1.7+ restores a background tab with a placeholder view (not the plugin's class) and keeps its saved state.
+    leaf.view = new DeferredPlaceholder(leaf, saved);
+    leaf.getViewState = () => (leaf.view instanceof DeferredPlaceholder ? saved : WorkspaceLeaf.prototype.getViewState.call(leaf));
+    r.app.workspace.leaves.push(leaf);
+
+    await r.start();
+    r.app.workspace.fireLayoutReady();
+    await r.runtime.ctx.ready;
+    await sleep(50);
+    expect(r.pty.calls).toHaveLength(0);
+    expect(r.sessions.list()).toEqual([]);
+    expect(r.terminals.views()).toEqual([]);
+
+    // The user clicks the tab: Obsidian loads the real view with the saved state.
+    await leaf.setViewState(saved);
+    const view = viewOf(leaf);
+    await waitFor(() => view.session?.state === 'running');
+    expect(r.pty.calls).toHaveLength(1);
+    expect(r.phases).toEqual([['restore', saved.state!.sessionId, 'bg']]);
+    expect(r.sessions.list().map((s) => s.panelId)).toEqual(['bg']);
+  });
+
+  it('Cmd-click on a URL in the output opens it in the default browser; a plain click does not (R2.9)', async () => {
+    const provide = vi.spyOn(Terminal.prototype, 'registerLinkProvider');
+    const harness = await setup();
+    const { view, proc } = await openRunning(harness, 'shell');
+    expect(provide).toHaveBeenCalledTimes(1);
+    const provider = provide.mock.calls[0]![0];
+    proc.emitData('see https://example.com\r\n');
+    await sleep(5);
+    await flushTerm(view);
+    const links = await new Promise<ILink[] | undefined>((resolve) => provider.provideLinks(1, resolve));
+    expect(links?.map((l) => l.text)).toEqual(['https://example.com']);
+    const link = links![0]!;
+    expect(link.range).toMatchObject({ start: { x: 5, y: 1 }, end: { x: 23, y: 1 } });
+
+    const win = (view.containerEl.ownerDocument.defaultView ?? window) as Window;
+    const open = vi.spyOn(win, 'open').mockImplementation(() => null);
+    link.activate(new MouseEvent('click', { button: 0 }), link.text);
+    expect(open).not.toHaveBeenCalled();
+    link.activate(new MouseEvent('click', { button: 0, metaKey: true }), link.text);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith('https://example.com', '_external');
+    // Only web URLs are opened.
+    link.activate(new MouseEvent('click', { metaKey: true }), 'file:///etc/passwd');
+    expect(open).toHaveBeenCalledTimes(1);
   });
 
   it('sizes the program to the panel and follows panel resizes (R1.8, R6.4)', async () => {

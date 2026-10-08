@@ -1,4 +1,5 @@
 import type { SpawnContribution, SpawnContributor } from '../core';
+import { listensWithin } from '../util/wait';
 
 /**
  * Port of the IDE server for this session. With it set, Claude Code picks the lock file with that port (skipping the
@@ -43,16 +44,4 @@ export function createClaudeIdeContributor(getEndpoint: () => IdeEndpoint | unde
     if (notice) contribution.notice = notice;
     return contribution;
   };
-}
-
-async function listensWithin(endpoint: IdeEndpoint, ms: number): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<boolean>((resolve) => {
-    timer = setTimeout(() => resolve(false), ms);
-  });
-  try {
-    return await Promise.race([endpoint.whenListening().then(() => true, () => false), timeout]);
-  } finally {
-    clearTimeout(timer);
-  }
 }

@@ -47,6 +47,8 @@ export interface SessionRegistryOptions {
 interface PendingAttach {
   sink: TerminalSink;
   profile: ProfileId;
+  /** The conversation id the attaching view has stored (its view state). */
+  sessionId: string | undefined;
   timer: ReturnType<typeof setTimeout>;
 }
 
@@ -546,13 +548,14 @@ export class SessionRegistry implements SessionsService {
     if (session.sink === sink) return 'unchanged';
     if (session.pending.some((p) => p.sink === sink)) return 'pending';
     if (!session.sink) {
-      this.takeOver(session, sink);
+      this.takeOver(session, sink, request.sessionId);
       return 'reattached';
     }
     // Another open view holds this panel: a move if that view detaches within the window, else a duplicate (D21).
     const pending: PendingAttach = {
       sink,
       profile: request.profile,
+      sessionId: request.sessionId,
       timer: setTimeout(() => this.resolveDuplicate(session, pending), this.duplicateWindowMs),
     };
     session.pending.push(pending);
@@ -575,7 +578,7 @@ export class SessionRegistry implements SessionsService {
     if (next) {
       // The other view opened first and this one is closing: it was a move.
       clearTimeout(next.timer);
-      this.takeOver(session, next.sink);
+      this.takeOver(session, next.sink, next.sessionId);
       return;
     }
     if (session.state === 'stopped') {
@@ -643,10 +646,15 @@ export class SessionRegistry implements SessionsService {
     this.emitter.clear();
   }
 
-  private takeOver(session: Session, sink: TerminalSink): void {
+  /**
+   * `viewSessionId` = the conversation id the new view has stored. If the session's id changed since that view saved
+   * its state (e.g. a resume picked a new id while the panel was moving), the view is told, so it persists the right id.
+   */
+  private takeOver(session: Session, sink: TerminalSink, viewSessionId: string | undefined): void {
     if (session.graceTimer) clearTimeout(session.graceTimer);
     session.graceTimer = undefined;
     session.setSink(sink);
+    if (session.sessionId !== viewSessionId) sink.identityChanged({ panelId: session.panelId, sessionId: session.sessionId });
     this.emitter.emit('attach', { panelId: session.panelId, profile: session.profile, reattached: true });
     void session.restoreInto(sink).catch((err) => this.log.error('reattach failed', err));
   }
@@ -657,7 +665,7 @@ export class SessionRegistry implements SessionsService {
     session.pending.splice(i, 1);
     if (this.disposed) return;
     if (this.sessions.get(session.panelId) === session && !session.sink) {
-      this.takeOver(session, pending.sink);
+      this.takeOver(session, pending.sink, pending.sessionId);
       return;
     }
     const panelId = newPanelId();

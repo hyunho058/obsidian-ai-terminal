@@ -1,7 +1,8 @@
+import * as fs from 'node:fs';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createBridgeModule } from '../../src/bridge/index';
 import { createIdeModule } from '../../src/bridge/ideModule';
 import { DIFF_TOOL_HINT, claudeGlobalConfigFile, createDiffToolHint, readClaudeDiffTool } from '../../src/bridge/ideDiffHint';
@@ -78,14 +79,32 @@ describe('Diff tool hint (R10.11, D35)', () => {
     expect((await rt.ctx.spawn.resolve(spawnCtx())).notices).toEqual([HINT]);
   });
 
-  it('diffTool "terminal" → no hint and nothing recorded (checked again later)', async () => {
+  it('diffTool "terminal" → no hint and nothing recorded; kept for this load (the file is not read again), checked again after a reload', async () => {
     writeConfig(globalConfig(), { diffTool: 'terminal' });
     const rt = await load();
+    const open = vi.spyOn(fs.promises, 'open');
+    const stat = vi.spyOn(fs.promises, 'stat');
+    onTestFinished(() => {
+      open.mockRestore();
+      stat.mockRestore();
+    });
+    const configReads = () => open.mock.calls.filter(([f]) => String(f) === globalConfig()).length;
     expect((await rt.ctx.spawn.resolve(spawnCtx())).notices).toEqual([]);
+    expect(configReads()).toBe(1);
+    const fsCalls = open.mock.calls.length + stat.mock.calls.length;
     expect((await rt.ctx.spawn.resolve(spawnCtx())).notices).toEqual([]);
+    expect((await rt.ctx.spawn.resolve({ ...spawnCtx(), panelId: 'p2' })).notices).toEqual([]);
+    expect(configReads()).toBe(1);
+    expect(open.mock.calls.length + stat.mock.calls.length).toBe(fsCalls); // no fs access at all for the hint
     expect(rt.ctx.settings.moduleData.ide).toBeUndefined();
+
+    // Changed meanwhile: noticed only after a plugin reload.
     writeConfig(globalConfig(), { diffTool: 'auto' });
-    expect((await rt.ctx.spawn.resolve(spawnCtx())).notices).toEqual([HINT]);
+    expect((await rt.ctx.spawn.resolve(spawnCtx())).notices).toEqual([]);
+    rt.runtime.unload();
+    const again = await load(rt.plugin.data ?? null);
+    expect((await again.ctx.spawn.resolve(spawnCtx())).notices).toEqual([HINT]);
+    expect(configReads()).toBe(2);
   });
 
   it('missing or unparsable config → hint', async () => {
@@ -199,6 +218,31 @@ describe('createDiffToolHint', () => {
     });
     expect(await hint()).toBeUndefined();
     expect(marked).toBe(false);
+  });
+
+  it('reads the config once per load while it says "terminal"; other answers are re-read until the hint shows', async () => {
+    let reads = 0;
+    let value: string | undefined | null = null;
+    let shown = false;
+    const deps = {
+      isShown: () => shown,
+      markShown: async () => void (shown = true),
+      configFile: async () => '/x',
+      readDiffTool: async () => {
+        reads++;
+        return value;
+      },
+    };
+    value = 'terminal';
+    const hint = createDiffToolHint(deps);
+    expect([await hint(), await hint(), await hint()]).toEqual([undefined, undefined, undefined]);
+    expect(reads).toBe(1);
+    value = 'auto';
+    expect(await hint()).toBeUndefined(); // cached for this load
+    const reloaded = createDiffToolHint(deps);
+    expect(await reloaded()).toBe(HINT);
+    expect(reads).toBe(2);
+    expect(shown).toBe(true);
   });
 
   it('a failed save still shows the hint once in this load', async () => {

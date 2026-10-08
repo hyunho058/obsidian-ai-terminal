@@ -1,7 +1,8 @@
 import type { SpawnContributor } from '../core';
 import { BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV } from '../bridge/claudeMcpContributor';
-import type { BridgeServerService } from '../bridge/httpServer';
+import type { BridgeEndpoint } from '../bridge/httpServer';
 import type { Logger } from '../util/log';
+import { listensWithin } from '../util/wait';
 
 export const SNAPSHOT_HOOK_SCRIPT = 'snapshot_hook.py';
 /** Tells the hook which panel the message comes from (for the panel notes). */
@@ -33,8 +34,8 @@ export const USER_SETTINGS_NOTICE = '[Snapshots: your --settings argument is kep
 export interface ClaudeHookContributorOptions {
   /** Whether Claude panels should get the hook (snapshots not turned off and git works). */
   wantsHook: () => boolean;
-  /** The bridge server when the bridge is enabled. */
-  getServer: () => BridgeServerService | undefined;
+  /** The bridge server (it serves `/snapshot` whenever snapshots need it, even with the bridge tools off). */
+  getServer: () => BridgeEndpoint | undefined;
   /** Absolute python3 (D7). */
   resolvePython: () => Promise<string>;
   /** Stable path of the installed hook (`~/.config/obsidian-ai-terminal/snapshot_hook.py`). */
@@ -44,8 +45,9 @@ export interface ClaudeHookContributorOptions {
 
 /**
  * Spawn contributor for Claude panels (R11.1 `--settings` part): `--settings=<json>` with the snapshot hook, plus the
- * panel id and bridge connection in the environment. Nothing is written to Claude's config. The `=` form keeps the JSON
- * one argument whatever follows.
+ * panel id and bridge connection in the environment — everything the hook needs, so it works without the bridge's MCP
+ * contributor (bridge tools off, deviation 19). Nothing is written to Claude's config. The `=` form keeps the JSON one
+ * argument whatever follows.
  */
 export function createClaudeHookContributor(o: ClaudeHookContributorOptions): SpawnContributor {
   return async (c) => {
@@ -68,16 +70,4 @@ export function createClaudeHookContributor(o: ClaudeHookContributorOptions): Sp
       env: { [PANEL_ID_ENV]: c.panelId, [BRIDGE_URL_ENV]: baseUrl, [BRIDGE_TOKEN_ENV]: server.token },
     };
   };
-}
-
-async function listensWithin(server: BridgeServerService, ms: number): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<boolean>((resolve) => {
-    timer = setTimeout(() => resolve(false), ms);
-  });
-  try {
-    return await Promise.race([server.whenListening().then(() => true, () => false), timeout]);
-  } finally {
-    clearTimeout(timer);
-  }
 }

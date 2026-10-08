@@ -1,5 +1,6 @@
-import type { IncomingMessage, ServerResponse } from 'http';
+import type { ServerResponse } from 'http';
 import { isAiProfile, type RouteHandler, type TerminalPanelHandle } from '../core';
+import { readBody } from '../util/http';
 import { redact, type Logger } from '../util/log';
 import { NOTES, TRAILER_PROMPT_CHARS } from './messages';
 import type { SnapshotAi, SnapshotResult, SnapshotsService } from './types';
@@ -48,7 +49,7 @@ export function createSnapshotRoute(o: SnapshotRouteOptions): RouteHandler {
     }
     let parsed: unknown;
     try {
-      parsed = body.length ? JSON.parse(body) : {};
+      parsed = body.length ? JSON.parse(body.toString('utf8')) : {};
     } catch {
       sendJson(res, 400, { status: 'failed', reason: 'invalid JSON' });
       return;
@@ -81,24 +82,4 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const data = JSON.stringify(body);
   res.writeHead(status, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) });
   res.end(data);
-}
-
-function readBody(req: IncomingMessage, limit: number): Promise<string | 'too-large'> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    let tooLarge = false;
-    req.on('data', (chunk: Buffer) => {
-      if (tooLarge) return;
-      size += chunk.length;
-      if (size > limit) {
-        tooLarge = true;
-        chunks.length = 0;
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => resolve(tooLarge ? 'too-large' : Buffer.concat(chunks).toString('utf8')));
-    req.on('error', reject);
-  });
 }

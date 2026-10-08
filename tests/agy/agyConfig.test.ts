@@ -8,6 +8,7 @@ import {
   FileLock,
   isShimEntry,
   parseMcpList,
+  shimCommandLine,
   type AgyConfigOptions,
 } from '../../src/bridge/agyConfig';
 import { supportDir } from '../../src/support/installScripts';
@@ -65,24 +66,26 @@ describe('parseMcpList', () => {
     expect(parseMcpList('')).toBeNull();
   });
 
-  it('recognises entries made by this plugin', () => {
+  it('recognises entries made by this plugin (old `<python> <shim>` and current `<python> -I <shim>` forms)', () => {
     expect(isShimEntry({ name: 'obsidian', type: 'stdio', status: 'enabled', command: '/usr/bin/python3 /old/home/.config/obsidian-ai-terminal/mcp_shim.py' })).toBe(true);
+    expect(isShimEntry({ name: 'obsidian', type: 'stdio', status: 'enabled', command: '/usr/bin/python3 -I /old/home/.config/obsidian-ai-terminal/mcp_shim.py' })).toBe(true);
+    expect(shimCommandLine(PY, SHIM)).toBe(`${PY} -I ${SHIM}`);
     expect(isShimEntry({ name: 'obsidian', type: 'http', status: 'enabled', command: 'http://127.0.0.1:1234/mcp' })).toBe(false);
     expect(isShimEntry({ name: 'obsidian', type: 'stdio', status: 'enabled', command: 'npx obsidian-mcp-server' })).toBe(false);
   });
 });
 
 describe('AgyConfig.ensureEntry (fake agy, temp HOME)', () => {
-  it('R11.3: adds `obsidian` → <python> <shim> with `--` when missing; other entries unchanged', async () => {
+  it('R11.3: adds `obsidian` → <python> -I <shim> with `--` when missing; other entries unchanged', async () => {
     const { fake, config, lockPath } = setup();
     const original = fake.writeConfig(secretConfig());
     expect(await config.ensureEntry(PY, SHIM)).toEqual({ status: 'added' });
     expect(fake.mcpCalls()).toEqual([
       ['mcp', 'list'],
-      ['mcp', 'add', 'obsidian', '--', PY, SHIM],
+      ['mcp', 'add', 'obsidian', '--', PY, '-I', SHIM],
     ]);
     const cfg = fake.readConfig()!;
-    expect(cfg.mcpServers.obsidian).toEqual({ args: [SHIM], command: PY, disabled: false });
+    expect(cfg.mcpServers.obsidian).toEqual({ args: ['-I', SHIM], command: PY, disabled: false });
     expect(cfg.mcpServers.context7).toEqual(secretConfig().mcpServers.context7);
     expect(cfg.mcpServers.remote).toEqual(secretConfig().mcpServers.remote);
     // every other entry's bytes are still in the file
@@ -112,14 +115,32 @@ describe('AgyConfig.ensureEntry (fake agy, temp HOME)', () => {
     fake.writeConfig({ mcpServers: { obsidian: { args: ['/old/mcp_shim.py'], command: '/usr/bin/python3', disabled: true } } });
     expect(await config.ensureEntry(PY, SHIM)).toEqual({ status: 'updated' });
     expect(fake.mcpCalls().map((a) => a[1])).toEqual(['list', 'add', 'disable']);
-    expect(fake.readConfig()!.mcpServers.obsidian).toEqual({ args: [SHIM], command: PY, disabled: true });
+    expect(fake.readConfig()!.mcpServers.obsidian).toEqual({ args: ['-I', SHIM], command: PY, disabled: true });
+  });
+
+  it('deviation 19: an entry in the old `<python> <shim>` form is updated once to `<python> -I <shim>`, then left alone', async () => {
+    const { fake, config } = setup();
+    fake.writeConfig({ mcpServers: { ...secretConfig().mcpServers, obsidian: { args: [SHIM], command: PY, disabled: false } } });
+    expect(await config.ensureEntry(PY, SHIM)).toEqual({ status: 'updated' });
+    expect(fake.mcpCalls('add')).toEqual([['mcp', 'add', 'obsidian', '--', PY, '-I', SHIM]]);
+    const cfg = fake.readConfig()!;
+    expect(cfg.mcpServers.obsidian).toEqual({ args: ['-I', SHIM], command: PY, disabled: false });
+    expect(cfg.mcpServers.context7).toEqual(secretConfig().mcpServers.context7);
+    const after = fake.readConfigRaw();
+    expect(await config.ensureEntry(PY, SHIM)).toEqual({ status: 'unchanged' });
+    expect(await config.ensureEntry(PY, SHIM)).toEqual({ status: 'unchanged' });
+    expect(fake.mcpCalls('add')).toHaveLength(1);
+    expect(fake.readConfigRaw()).toBe(after);
+    // The updated entry is still recognised as ours: turning the bridge off removes it.
+    expect(await config.removeEntry()).toEqual({ status: 'removed' });
   });
 
   it('leaves an `obsidian` entry it did not create alone', async () => {
     const { fake, config } = setup();
     const raw = fake.writeConfig({ mcpServers: { obsidian: { serverUrl: 'http://127.0.0.1:27123/mcp', headers: { 'X-Key': DUMMY_SECRET } } } });
-    expect(await config.ensureEntry(PY, SHIM)).toEqual({ status: 'foreign', command: 'http://127.0.0.1:27123/mcp' });
-    expect(await config.removeEntry()).toEqual({ status: 'foreign', command: 'http://127.0.0.1:27123/mcp' });
+    // The outcome never carries the foreign entry's command / URL (it may hold a secret).
+    expect(await config.ensureEntry(PY, SHIM)).toEqual({ status: 'foreign' });
+    expect(await config.removeEntry()).toEqual({ status: 'foreign' });
     expect(fake.mcpCalls().map((a) => a[1])).toEqual(['list', 'list']);
     expect(fake.readConfigRaw()).toBe(raw);
   });

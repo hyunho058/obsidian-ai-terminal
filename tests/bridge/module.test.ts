@@ -1,23 +1,57 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { existsSync } from 'node:fs';
+import * as http from 'node:http';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV, claudeMcpConfig, createBridgeModule, createClaudeMcpContributor } from '../../src/bridge/index';
-import type { BridgeServerService } from '../../src/bridge/httpServer';
+import type { BridgeEndpoint, BridgeServerService } from '../../src/bridge/httpServer';
+import type { FeatureModule } from '../../src/core/types';
 import type { SpawnContext } from '../../src/core/spawn';
 import { createBridgeEnv, startRuntime } from './helpers';
 
 type Runtime = Awaited<ReturnType<typeof startRuntime>>;
 const runtimes: Runtime[] = [];
 
-async function load(data: unknown = null) {
+async function load(data: unknown = null, extra: FeatureModule[] = []) {
   const env = createBridgeEnv();
-  const rt = await startRuntime(env, [createBridgeModule({ debounceMs: 10 })], data);
+  const rt = await startRuntime(env, [createBridgeModule({ debounceMs: 10 }), ...extra], data);
   runtimes.push(rt);
   return { env, ...rt };
 }
+
+/** A module that adds `GET /ping` to ctx.routes and keeps the server up while `needed()` (like snapshots do). */
+function routeUser(needed: () => boolean): FeatureModule & { dispose?: () => void } {
+  const mod: FeatureModule & { dispose?: () => void } = {
+    id: 'route-user',
+    register(ctx) {
+      ctx.routes.addRoute('GET', '/ping', (_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('pong');
+      });
+      mod.dispose = ctx.services.require('bridgeServer').keepRunningWhile('ping', needed);
+    },
+  };
+  return mod;
+}
+
+/** One request on a fresh connection (no keep-alive pool: the server is stopped and restarted in between). */
+function call(url: string, init: { method?: string; token?: string; body?: string } = {}): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' };
+    if (init.token) headers.Authorization = `Bearer ${init.token}`;
+    const req = http.request(url, { method: init.method ?? 'POST', headers, agent: false }, (res) => {
+      let text = '';
+      res.on('data', (c: Buffer) => (text += c.toString('utf8')));
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, text }));
+    });
+    req.on('error', reject);
+    req.end(init.method === 'GET' ? undefined : (init.body ?? '{}'));
+  });
+}
+
+const INIT = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'raw', version: '0' } } });
 
 function spawnCtx(profile: SpawnContext['profile']): SpawnContext {
   return { profile, panelId: 'p1', vaultPath: '/vault', phase: 'new', command: profile, baseArgs: ['--model', 'sonnet'] };
@@ -97,6 +131,66 @@ describe('bridge module', () => {
     expect((await ctx.spawn.resolve(spawnCtx('claude'))).env).toEqual({});
   });
 
+  it('deviation 19: tools off but another module needs the server → it listens, serves only ctx.routes, /mcp is 404, no --mcp-config', async () => {
+    let needed = true;
+    const user = routeUser(() => needed);
+    const { ctx } = await load({ bridgeEnabled: false }, [user]);
+    const server = ctx.services.require('bridgeServer');
+    expect(server.isRunning()).toBe(true);
+    const base = server.baseUrl!;
+    expect(base).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    // The token is still checked before routing.
+    expect((await call(`${base}/ping`, { method: 'GET' })).status).toBe(401);
+    expect((await call(`${base}/mcp`, { body: INIT })).status).toBe(401);
+    expect(await call(`${base}/ping`, { method: 'GET', token: server.token })).toEqual({ status: 200, text: 'pong' });
+    const mcp = await call(`${base}/mcp`, { token: server.token, body: INIT });
+    expect(mcp.status).toBe(404);
+    expect(mcp.text).toContain('turned off');
+    const plan = await ctx.spawn.resolve(spawnCtx('claude'));
+    expect(plan.args).toEqual(['--model', 'sonnet']);
+    expect(plan.env).toEqual({});
+
+    // Turning the tools on serves /mcp on the same server (no restart); off again → 404 again, server still up.
+    const port = server.port;
+    ctx.settings.bridgeEnabled = true;
+    await ctx.saveSettings();
+    expect(server.port).toBe(port);
+    expect((await call(`${base}/mcp`, { token: server.token, body: INIT })).status).toBe(200);
+    expect((await ctx.spawn.resolve(spawnCtx('claude'))).args.some((a) => a.startsWith('--mcp-config='))).toBe(true);
+    ctx.settings.bridgeEnabled = false;
+    await ctx.saveSettings();
+    expect(server.isRunning()).toBe(true);
+    expect((await call(`${base}/mcp`, { token: server.token, body: INIT })).status).toBe(404);
+
+    // The need goes away (checked after a settings change) → the server stops; it comes back with the need.
+    needed = false;
+    await ctx.saveSettings();
+    expect(server.isRunning()).toBe(false);
+    needed = true;
+    await ctx.saveSettings();
+    await server.whenListening();
+    expect((await call(`${server.baseUrl}/ping`, { method: 'GET', token: server.token })).status).toBe(200);
+
+    // Dropping the demand is re-checked at once.
+    user.dispose!();
+    expect(server.isRunning()).toBe(false);
+  });
+
+  it('deviation 19: tools off and no module needs the server → nothing listens', async () => {
+    const { ctx } = await load({ bridgeEnabled: false }, [routeUser(() => false)]);
+    const server = ctx.services.require('bridgeServer');
+    expect(server.isRunning()).toBe(false);
+    expect(server.baseUrl).toBeNull();
+    await expect(server.whenListening()).rejects.toThrow();
+  });
+
+  it('tools on: a demand that is not needed changes nothing (server up, /mcp served)', async () => {
+    const { ctx } = await load(null, [routeUser(() => false)]);
+    const server = ctx.services.require('bridgeServer');
+    expect(server.isRunning()).toBe(true);
+    expect((await call(server.url!, { token: server.token, body: INIT })).status).toBe(200);
+  });
+
   it('R9.5: unload closes the port synchronously', async () => {
     const { ctx, runtime } = await load();
     const server = ctx.services.require('bridgeServer') as BridgeServerService;
@@ -128,7 +222,7 @@ describe('claude MCP contributor', () => {
     let running = false;
     let release!: () => void;
     const listening = new Promise<void>((r) => (release = r));
-    const fake: BridgeServerService = {
+    const fake: BridgeEndpoint = {
       get url() {
         return running ? 'http://127.0.0.1:9/mcp' : null;
       },

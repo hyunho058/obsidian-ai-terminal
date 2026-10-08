@@ -168,6 +168,45 @@ describe('BridgeHttpServer (R9)', () => {
     expect((await request(port, { auth, body: '{not json' })).status).toBe(400);
   });
 
+  it('deviation 19: with serveMcp() false, /mcp answers 404 (after the token check) and routes still work', async () => {
+    const routes = new BridgeRouteRegistry();
+    routes.addRoute('POST', '/snapshot', (_req, res) => void res.writeHead(200).end('ok'));
+    let tools = false;
+    const server = new BridgeHttpServer({ routes, createMcpServer: () => createBridgeMcpServer(fakeState()), log: createLogger('t', silentSink()), token: TOKEN, serveMcp: () => tools });
+    servers.push(server);
+    await server.start();
+    const port = server.port!;
+    const auth = `Bearer ${TOKEN}`;
+    expect((await request(port, { body: INIT })).status).toBe(401);
+    expect((await request(port, { auth: 'Bearer wrong-token-0123456789', body: INIT })).status).toBe(401);
+    const off = await request(port, { auth, body: INIT });
+    expect(off.status).toBe(404);
+    expect(JSON.parse(off.body)).toMatchObject({ error: 'not_found' });
+    expect((await request(port, { auth, method: 'GET', path: '/mcp' })).status).toBe(404);
+    expect((await request(port, { auth, path: '/snapshot' })).status).toBe(200);
+    tools = true; // read per request
+    expect((await request(port, { auth, body: INIT })).status).toBe(200);
+  });
+
+  it('keepRunningWhile: neededFor() lists the reasons needed now; a throwing check counts as not needed; disposers notify', () => {
+    const changes: number[] = [];
+    const server = new BridgeHttpServer({ routes: new BridgeRouteRegistry(), createMcpServer: () => createBridgeMcpServer(fakeState()), log: createLogger('t', silentSink()), onDemandChange: () => changes.push(1) });
+    servers.push(server);
+    let a = true;
+    const offA = server.keepRunningWhile('a', () => a);
+    const offB = server.keepRunningWhile('b', () => {
+      throw new Error('broken check');
+    });
+    expect(changes).toHaveLength(2);
+    expect(server.neededFor()).toEqual(['a']);
+    a = false;
+    expect(server.neededFor()).toEqual([]);
+    offA();
+    offA();
+    offB();
+    expect(changes).toHaveLength(4);
+  });
+
   it('a throwing route answers 500', async () => {
     const routes = new BridgeRouteRegistry();
     routes.addRoute('POST', '/boom', () => {

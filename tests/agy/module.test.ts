@@ -2,14 +2,16 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createAgyModule, type AgyModuleOptions } from '../../src/bridge/agyModule';
-import { AGY_LOCK_FILE } from '../../src/bridge/agyConfig';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
+import { createAgyModule, FOREIGN_ENTRY_NOTICE, type AgyModuleOptions } from '../../src/bridge/agyModule';
+import { AGY_LOCK_FILE, shimCommand } from '../../src/bridge/agyConfig';
 import { createAgyEnvContributor } from '../../src/bridge/agyEnvContributor';
-import type { BridgeServerService } from '../../src/bridge/httpServer';
+import type { BridgeEndpoint } from '../../src/bridge/httpServer';
 import { BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV, createBridgeModule } from '../../src/bridge/index';
 import type { SpawnContext } from '../../src/core/spawn';
+import type { FeatureModule } from '../../src/core/types';
 import { supportDir } from '../../src/support/installScripts';
+import { setDebugLogging } from '../../src/util/log';
 import { Notice } from '../mocks/obsidian';
 import { DUMMY_SECRET, createFakeAgy, secretConfig, type FakeAgy } from './fakeAgy';
 import { SHIM_SOURCE, startAgyRuntime, stubPythonModule, waitFor } from './helpers';
@@ -61,7 +63,7 @@ describe('agy module', () => {
     expect(readFileSync(shimPath(), 'utf8')).toBe(readFileSync(SHIM_SOURCE, 'utf8'));
     expect(fake.mcpCalls()).toEqual([
       ['mcp', 'list'],
-      ['mcp', 'add', 'obsidian', '--', PY, shimPath()],
+      ['mcp', 'add', 'obsidian', '--', PY, '-I', shimPath()],
     ]);
     expect(ctx.services.require('agyBridge').lastOutcome).toEqual({ status: 'added' });
     const cfg = fake.readConfig()!;
@@ -153,7 +155,36 @@ describe('agy module', () => {
     expect(fake.mcpCalls('add')).toEqual([]);
     expect(fake.readConfigRaw()).toBe(raw);
     expect(Notice.shown).toHaveLength(1);
+    expect(Notice.shown[0]!.message).toBe(FOREIGN_ENTRY_NOTICE);
     expect(Notice.shown[0]!.message).toContain('agy mcp remove obsidian');
+  });
+
+  it('deviation 19: a foreign entry\'s command / URL / headers never reach a Notice, a log line or the service', async () => {
+    const SECRET = 'sk-fake-FOREIGN-0123456789abcdef';
+    const fake = newFake();
+    setDebugLogging(true); // capture every log level
+    onTestFinished(() => setDebugLogging(false));
+    for (const foreign of [
+      { serverUrl: `https://user:${SECRET}@mcp.example.com/obsidian?token=${SECRET}`, headers: { Authorization: `Bearer ${SECRET}` } },
+      { command: '/usr/local/bin/obsidian-mcp', args: ['--api-key', SECRET], env: { OBSIDIAN_API_KEY: SECRET } },
+    ]) {
+      Notice.clear();
+      const raw = fake.writeConfig({ mcpServers: { obsidian: foreign } });
+      const s = await load(fake);
+      // Turning the agy bridge off: the remove path meets the same foreign entry.
+      s.store.settings.agyBridgeEnabled = false;
+      await s.ctx.saveSettings();
+      await waitFor(() => s.ctx.services.require('agyBridge').lastOutcome?.status === 'foreign' && fake.mcpCalls('list').length >= 2);
+      expect(fake.readConfigRaw()).toBe(raw);
+      expect(Notice.shown.map((n) => n.message)).toEqual([FOREIGN_ENTRY_NOTICE]);
+      const seen = [...Notice.shown.map((n) => n.message), ...s.out.lines, JSON.stringify(s.ctx.services.require('agyBridge').lastOutcome)].join('\n');
+      expect(s.out.lines.some((l) => l.includes('not created by this plugin'))).toBe(true);
+      expect(s.out.lines.some((l) => l.includes('agy mcp list'))).toBe(true); // debug lines were captured too
+      for (const leak of [SECRET, 'mcp.example.com', '/usr/local/bin/obsidian-mcp', '--api-key']) expect(seen).not.toContain(leak);
+      s.runtime.unload();
+      rmSync(join(homedir(), '.gemini'), { recursive: true, force: true });
+      for (const f of ['calls.log', 'control.json']) rmSync(join(fake.dir, f), { force: true });
+    }
   });
 
   it('the ready gate is bounded even if agy hangs', async () => {
@@ -190,7 +221,7 @@ describe('agy module', () => {
 });
 
 describe('agy env contributor', () => {
-  const server = (over: Partial<BridgeServerService> = {}): BridgeServerService => ({
+  const server = (over: Partial<BridgeEndpoint> = {}): BridgeEndpoint => ({
     url: 'http://127.0.0.1:4321/mcp',
     baseUrl: 'http://127.0.0.1:4321',
     port: 4321,
@@ -238,12 +269,30 @@ describe('agy env contributor', () => {
     store.settings.bridgeEnabled = false;
     expect((await ctx.spawn.resolve(spawnCtx('agy'))).env).toEqual({});
   });
+
+  it('deviation 19: bridge tools off while the server runs for snapshots → agy panels get no bridge env', async () => {
+    const snapshotsLike: FeatureModule = {
+      id: 'snapshots-like',
+      register(ctx) {
+        ctx.onUnload(ctx.services.require('bridgeServer').keepRunningWhile('snapshots', () => true));
+      },
+    };
+    const settings = { profiles: { agy: { command: newFake().path, args: '' } }, bridgeEnabled: false };
+    const s = await startAgyRuntime([stubPythonModule(PY), createBridgeModule(), createAgyModule(), snapshotsLike], settings);
+    started.push(s);
+    expect(s.ctx.services.require('bridgeServer').isRunning()).toBe(true);
+    expect(s.ctx.settings.agyBridgeEnabled).toBe(true);
+    const plan = await s.ctx.spawn.resolve(spawnCtx('agy'));
+    expect(plan.env).toEqual({});
+    expect(plan.args).toEqual([]);
+  });
 });
 
-/** Runs the installed shim like agy would, with the env of a resolved agy spawn plan. */
+/** Runs the installed shim like agy would (the registered `<python> -I <shim>` command), with the env of a resolved agy spawn plan. */
 function runShim(env: Record<string, string>, messages: object[], expectLines: number): Promise<{ lines: Record<string, unknown>[]; stderr: string; code: number | null }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(PY, [shimPath()], { env: { PATH: process.env.PATH ?? '', HOME: homedir(), ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const [python, ...args] = shimCommand(PY, shimPath());
+    const child = spawn(python!, args, { env: { PATH: process.env.PATH ?? '', HOME: homedir(), ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
     const timer = setTimeout(() => {

@@ -47,7 +47,7 @@ Before each message to an AI, the plugin can save a **snapshot** of your notes. 
 3. In Obsidian, open Settings › **Community plugins**. Turn off **Restricted mode**. Then turn on **AI Terminal**.
 
 4. Open a panel (see [Usage](#usage)). The first time, you see some questions:
-   - "Enable AI session snapshots for this vault?" — we suggest **Yes**.
+   - "Enable AI session snapshots for this vault?" — click **Enable**.
    - Claude Code and Antigravity ask if you trust the folder. Say yes.
    - Antigravity may ask you to sign in.
 
@@ -55,39 +55,68 @@ Before each message to an AI, the plugin can save a **snapshot** of your notes. 
 
 Do these steps once after you install. They check the things that only work inside the real Obsidian app.
 "Expect" says what you should see. If a step fails, look at [Troubleshooting](#troubleshooting).
+You need a test note, for example `X.md` with a few lines of text.
 
-1. **Commands.** Press Cmd+P and type `AI Terminal`.
+1. **Commands.** Open the developer console (Cmd+Option+I). Press Cmd+P and type `AI Terminal`.
    Expect: "Open Claude Code", "Open Antigravity", "Open shell" and "Restore notes from before an AI session…".
+   Expect: no red error lines from AI Terminal (they start with `[AI Terminal`) in the developer console.
 2. **macOS permission.** Run "Open shell". Type `ls` and press Enter.
    Expect: a list of your notes, and no "Operation not permitted". If macOS asks
    "“Obsidian” would like to access files in your Documents folder", click **Allow**, then try again.
-3. **Claude Code.** Run "Open Claude Code".
+3. **Korean input and links.** In the shell panel, switch to the Korean input method, type `안녕` and press Enter.
+   Expect: an error like `zsh: command not found: 안녕` — the shell got exactly `안녕` (no missing or doubled syllable).
+   Then run `echo https://example.com` and Cmd-click the link in the output.
+   Expect: the page opens in your default browser. A click without Cmd opens nothing.
+4. **Claude Code.** Run "Open Claude Code".
    Expect: a new panel in the right sidebar with Claude Code. Its welcome box shows your vault folder as `cwd`.
+   Expect: the cursor is in the panel — you can type without clicking.
    Ask "read one of my notes and summarise it". Expect: Claude can read it (no permission error).
-4. **Antigravity.** Run "Open Antigravity".
+5. **New line in Claude.** In the Claude panel type `one`, press Shift+Enter, type `two`.
+   Expect: two lines in Claude's input; nothing is sent until you press Enter.
+6. **Antigravity.** Run "Open Antigravity".
    Expect: the Antigravity screen in a new panel, started in your vault folder.
-5. **AI edits.** Open a note, for example `X.md`. Ask Claude: "add the line hello at the end of X.md". Approve the edit.
+7. **AI edits.** Open `X.md`. Ask Claude: "add the line hello at the end of X.md". Approve the edit.
    Expect: the editor shows the new line. You do not need to reload.
-6. **Selection.** Select 3 lines in `X.md`. Click into the Claude panel.
-   Expect: Claude shows "⧉ 3 lines selected" (near the input box). Type "explain the selected text" and press Enter.
-   Expect: the answer is about those lines. Type `/ide`. Expect: Obsidian is connected.
-7. **Claude from Terminal.app.** In Terminal.app, `cd` into the vault folder and start `claude`. Type `/ide`.
-   Expect: Obsidian is in the list, and connecting works.
-8. **Moving panels.** Ask Claude a long question. While it answers, drag the panel's tab into the main editor area.
-   Then right-click the tab and choose "Move to new window".
-   Expect: the answer keeps going. The screen and the history stay. Nothing restarts.
-   Now copy 3 lines of text and paste them into Claude. Expect: one paste with 3 lines; it is not sent line by line.
-9. **Close all.** Open two panels with running programs. Right-click a tab and choose "Close all".
-   Expect: one dialog that lists both panels. "Stop and close" closes both.
-10. **Antigravity snapshot.** Snapshots must be on. Change a note. In the Antigravity panel type a message,
-    press Enter, and type `abc` right after.
+8. **Diffs in the terminal.** In Claude run `/config` → **Diff tool** → **terminal**. Ask Claude to change `X.md`.
+   Expect: the diff and the Yes/No prompt appear in the panel, and no "Opened changes in Obsidian ⧉".
+9. **Active note.** Click into `X.md`, then click into the Claude panel and ask "which note do I have open?".
+   Expect: Claude uses the obsidian tool `get_active_note` and answers `X.md`.
+10. **Selection.** Select 3 lines in `X.md`. Click into the Claude panel.
+    Expect: Claude shows "⧉ 3 lines selected" (near the input box). Type "explain the selected text" and press Enter.
+    Expect: the answer is about those lines. Type `/ide`. Expect: Obsidian is connected.
+11. **Claude from Terminal.app.** In Terminal.app, `cd` into the vault folder and start `claude`. Type `/ide`.
+    Expect: Obsidian is in the list, and connecting works.
+12. **Moving panels.** Ask Claude a long question. While it answers, drag the panel's tab into the main editor area.
+    Then right-click the tab and choose "Move to new window".
+    Expect: the answer keeps going. The screen and the history stay. Nothing restarts.
+    Now copy 3 lines of text and paste them into Claude. Expect: one paste with 3 lines; it is not sent line by line.
+13. **Split.** Right-click the tab of a running Claude panel and choose "Split right".
+    Expect: the new panel starts a fresh Claude conversation; the first panel keeps running with its text.
+14. **Close one.** Click × on the tab of a running panel.
+    Expect: the dialog "Claude Code is still running — stop it and close?" (or the name of that panel's program).
+    Click Cancel: the panel stays and keeps running.
+15. **Close all.** Open two panels with running programs. Right-click a tab and choose "Close all".
+    Expect: one dialog that lists both panels. "Stop and close" closes both.
+16. **Workspace layouts.** Turn on the core plugin **Workspaces** (Settings › Core plugins). Save a layout without
+    terminal panels. Open a panel with a running program, then load the saved layout.
+    Expect: no stop-and-close dialog; the layout changes and the program of the closed panel stops.
+17. **Antigravity snapshot.** Snapshots must be on. Run "Open Antigravity". Change a note. In the Antigravity panel
+    type a message, press Enter, and type `abc` right after.
     Expect: the message is sent within 2 seconds, and `abc` appears after it, in the right order.
     The restore command lists a new snapshot "Before input in Antigravity".
-11. **Force quit.** Open a Claude panel and an Antigravity panel. Force-quit Obsidian (Cmd+Option+Esc).
+18. **Quit.** Open two Claude panels as tabs in the right sidebar, so only one of them is visible.
+    Quit Obsidian with Cmd+Q.
+    Expect: no dialog. Wait 5 seconds. In Terminal.app run `pgrep -fl pty_bridge.py`. Expect: no output.
+19. **Restart.** Start Obsidian again.
+    Expect: your panels come back. Each Claude panel continues its own conversation.
+    Before you click the hidden tab from step 18, run `pgrep -fl pty_bridge.py` in Terminal.app.
+    Expect: one line for each terminal panel that is visible on screen — none for terminal tabs you have not clicked yet.
+    Click the hidden tab. Expect: its program starts now (Claude continues its conversation), and
+    `pgrep -fl pty_bridge.py` shows one more line.
+20. **Force quit.** Open a Claude panel and an Antigravity panel. Force-quit Obsidian (Cmd+Option+Esc).
     Wait 5 seconds. In Terminal.app run `pgrep -fl pty_bridge.py`.
     Expect: no output. (No helper, `claude` or `agy` from Obsidian is left running.)
-12. **Restart.** Start Obsidian again.
-    Expect: your panels come back. Each Claude panel continues its own conversation.
+    Start Obsidian again. Expect: the panels come back.
 
 ## Usage
 
@@ -197,8 +226,9 @@ agy has no option to add a server for one session. So the plugin adds **one glob
   - when an AI panel **starts** (new, restored or restarted).
 - A snapshot never stops your message. If it is slow, the message goes on after 10 seconds (Claude) or
   2 seconds (Antigravity). If it fails, the panel shows `[Snapshot failed: … — this message is not protected]`.
-- Turning off **"Bridge tools"** also stops the per-message snapshots in Claude panels (they use the bridge).
-  Snapshots for Antigravity and at panel start still work.
+- Turning off **"Bridge tools"** does **not** turn off snapshots. Claude panels still save a snapshot before each
+  message: the plugin keeps its small local server (127.0.0.1, with the token) running for snapshots only, without
+  the AI tools. To stop snapshots, turn off **"AI session snapshots"**.
 
 ### Where the history lives
 

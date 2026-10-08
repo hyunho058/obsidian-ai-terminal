@@ -7,6 +7,7 @@
 // URL-encoded, base64 or as a 16-character fragment. Tokens are allowed only where they must be: the bridge token in
 // the environment of Claude / agy panels, the IDE token in `~/.claude/ide/<port>.lock` (mode 0600).
 import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import * as http from 'node:http';
 import { homedir, tmpdir } from 'node:os';
@@ -206,6 +207,14 @@ function commitMessages(): string[] {
   return raw.split('\0').map((m) => m.trim()).filter(Boolean);
 }
 
+/** R11.1: Claude's own config files, which the plugin must never change. */
+let claudeConfigFiles: string[] = [];
+let claudeConfigHashes: Record<string, string> = {};
+
+function hashFiles(files: readonly string[]): Record<string, string> {
+  return Object.fromEntries(files.map((f) => [f, createHash('sha256').update(readFileSync(f)).digest('hex')]));
+}
+
 function call(profile: 'claude' | 'agy' | 'shell') {
   const command = ctx.settings.profiles[profile].command;
   const found = pty.calls.find((c) => c.command === command);
@@ -258,6 +267,14 @@ beforeAll(async () => {
     `#!/bin/bash\n{ printf '%s\\n' "$*"; env; echo ---; } >> '${agyEnvLog}'\nstat -f '%Lp' '${agyLock}' >> '${agyLockModes}'\nexec '${fakeAgy.path}' "$@"\n`,
   );
   chmodSync(agyWrapper, 0o755);
+
+  // R11.1: the user's Claude Code config (user, user settings, project servers) exists before the plugin loads.
+  mkdirSync(join(homedir(), '.claude'), { recursive: true });
+  claudeConfigFiles = [join(homedir(), '.claude.json'), join(homedir(), '.claude', 'settings.json'), join(vault, '.mcp.json')];
+  writeFileSync(claudeConfigFiles[0]!, JSON.stringify({ numStartups: 3, mcpServers: { mine: { type: 'stdio', command: 'my-server' } } }, null, 2));
+  writeFileSync(claudeConfigFiles[1]!, JSON.stringify({ permissions: { allow: ['Read'] }, hooks: {} }, null, 2));
+  writeFileSync(claudeConfigFiles[2]!, JSON.stringify({ mcpServers: { project: { type: 'http', url: 'http://127.0.0.1:1/mcp' } } }, null, 2));
+  claudeConfigHashes = hashFiles(claudeConfigFiles);
 
   env = createBridgeEnv(vault);
   plugin = new AiTerminalPlugin(env.obsidianApp as App, createManifest() as never);
@@ -323,6 +340,25 @@ describe('R15.1: tokens never leak', () => {
     expectClean('shell panel environment', Object.values(shellEnv).map(String));
     // The IDE token travels only through the 0600 lock file — no panel environment carries it.
     for (const c of pty.calls) expect(Object.values(c.env ?? {}).join('\n')).not.toContain(ideToken);
+  });
+
+  it('R11.1: the Claude panel gets the bridge for its session only (--mcp-config, --settings hook, --ide, SSE port); Claude config files unchanged', () => {
+    const claude = call('claude');
+    const args = claude.args ?? [];
+    const server = ctx.services.require('bridgeServer');
+    const mcpFlag = args.find((a) => a.startsWith('--mcp-config='))!;
+    expect(JSON.parse(mcpFlag.slice('--mcp-config='.length))).toEqual({
+      mcpServers: { obsidian: { type: 'http', url: server.url, headers: { Authorization: 'Bearer ${OBSIDIAN_BRIDGE_TOKEN}' } } },
+    });
+    const settingsFlag = args.find((a) => a.startsWith('--settings='))!;
+    const hooks = JSON.parse(settingsFlag.slice('--settings='.length)).hooks;
+    expect(Object.keys(hooks)).toEqual(['UserPromptSubmit']);
+    expect(hooks.UserPromptSubmit[0].hooks[0]).toMatchObject({ type: 'command', command: expect.stringContaining('snapshot_hook.py') });
+    expect(args.filter((a) => a === '--ide')).toHaveLength(1);
+    expect(claude.env?.CLAUDE_CODE_SSE_PORT).toBe(String(ctx.services.require('ide').port));
+    // Nothing was written to Claude Code's own configuration.
+    expect(hashFiles(claudeConfigFiles)).toEqual(claudeConfigHashes);
+    expect(readdirSync(join(homedir(), '.claude')).sort()).toEqual(['ide', 'settings.json']);
   });
 
   it('HTTP bridge: wrong / missing / misplaced tokens get a fixed 401 that never echoes a token', async () => {
@@ -539,7 +575,8 @@ describe('R15.1: tokens never leak', () => {
     await ctx.services.require('bridgeServer').whenListening();
 
     // argv and environment of every `agy mcp …` call the plugin made.
-    expect(fakeAgy.mcpCalls('add')[0]).toEqual(['mcp', 'add', 'obsidian', '--', PYTHON, ctx.services.require('agyBridge').shimPath]);
+    // Approved deviation 19: the relay is registered as `python -I <shim>`.
+    expect(fakeAgy.mcpCalls('add')[0]).toEqual(['mcp', 'add', 'obsidian', '--', PYTHON, '-I', ctx.services.require('agyBridge').shimPath]);
     expectClean('agy argv', fakeAgy.calls().map((c) => c.args.join('\0')));
     expectClean('agy environment', readFileSync(agyEnvLog, 'utf8'));
 
@@ -592,6 +629,8 @@ describe('R15.1: tokens never leak', () => {
     expectClean('commit messages', commitMessages());
     expectClean('data.json', JSON.stringify((plugin as unknown as { data: unknown }).data));
     expect(scanFiles([homedir(), vault, tools])).toEqual([]);
+    // R11.1: Claude's config files are still unchanged after everything above.
+    expect(hashFiles(claudeConfigFiles)).toEqual(claudeConfigHashes);
   });
 });
 

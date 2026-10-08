@@ -1,3 +1,5 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -129,7 +131,7 @@ describe('ide module', () => {
   });
 
   it('R10.10: with ideConnectionEnabled = false there is no server or lock file, no --ide / SSE port, and the HTTP tools still work', async () => {
-    const { ctx, ide } = await load({ ideConnectionEnabled: false });
+    const { ctx, env, ide } = await load({ ideConnectionEnabled: false });
     expect(ide.isRunning()).toBe(false);
     expect(ide.port).toBeNull();
     expect(lockFiles()).toEqual([]);
@@ -137,7 +139,29 @@ describe('ide module', () => {
     expect(plan.args).not.toContain('--ide');
     expect(plan.env.CLAUDE_CODE_SSE_PORT).toBeUndefined();
     expect(plan.args.some((a) => a.startsWith('--mcp-config='))).toBe(true);
-    expect(ctx.services.require('bridgeServer').isRunning()).toBe(true);
+    const server = ctx.services.require('bridgeServer');
+    expect(server.isRunning()).toBe(true);
+
+    // The D24 tools over HTTP, as Claude's MCP client calls them (bearer token from the panel environment).
+    const x = env.addNote('Notes/X.md', 'one\ntwo\nthree');
+    env.focus(x.leaf);
+    x.editor.setSelection({ line: 1, ch: 0 }, { line: 1, ch: 3 });
+    const client = new Client({ name: 'claude-code', version: '1' });
+    await client.connect(new StreamableHTTPClientTransport(new URL(server.url!), { requestInit: { headers: { Authorization: `Bearer ${plan.env[BRIDGE_TOKEN_ENV]}` } } }));
+    try {
+      const { tools } = await client.listTools();
+      expect(tools.map((t) => t.name).sort()).toEqual(['get_active_note', 'get_links', 'get_selection', 'list_open_notes', 'open_note']);
+      const active = await client.callTool({ name: 'get_active_note', arguments: {} });
+      expect(active.isError).toBeFalsy();
+      expect(JSON.parse((active.content as Array<{ text: string }>)[0]!.text)).toEqual({ path: 'Notes/X.md', content: 'one\ntwo\nthree', cursorLine: 2 });
+      const selection = await client.callTool({ name: 'get_selection', arguments: {} });
+      expect(JSON.parse((selection.content as Array<{ text: string }>)[0]!.text)).toEqual({ path: 'Notes/X.md', text: 'two', fromLine: 2, toLine: 2 });
+    } finally {
+      await client.close();
+    }
+    // Still no IDE server or lock file after the tool calls.
+    expect(ide.isRunning()).toBe(false);
+    expect(lockFiles()).toEqual([]);
   });
 
   it('settings toggle: off → server closed, lock removed, contributor silent, bridge untouched; on → back with a new lock file', async () => {

@@ -1,4 +1,5 @@
-import type { FeatureModule, PluginContext } from '../core';
+import type { FeatureModule } from '../core';
+import { spawnEnv } from '../util/spawnEnv';
 import { createResumeContributor, type ResumeDeps } from './resume';
 import { claudeConfigDir } from './resumeTranscript';
 
@@ -10,6 +11,7 @@ import { claudeConfigDir } from './resumeTranscript';
 export function createResumeModule(options: Partial<Omit<ResumeDeps, 'log'>> = {}): FeatureModule {
   return {
     id: 'resume',
+    label: 'conversation resume',
     register(ctx) {
       const contributor = createResumeContributor({
         log: ctx.log.child('resume'),
@@ -19,13 +21,4 @@ export function createResumeModule(options: Partial<Omit<ResumeDeps, 'log'>> = {
       ctx.onUnload(ctx.spawn.add('resume', contributor));
     },
   };
-}
-
-/** The environment Claude will see (login-shell layer), so `$CLAUDE_CONFIG_DIR` from the user's profile counts. */
-function spawnEnv(ctx: PluginContext): Readonly<Record<string, string | undefined>> {
-  try {
-    return ctx.services.get('shellEnv')?.getSpawnEnv() ?? process.env;
-  } catch {
-    return process.env;
-  }
 }

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { App, Plugin } from 'obsidian';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { PluginRuntime } from '../../src/core/runtime';
+import { loadFailureNotice, PluginRuntime } from '../../src/core/runtime';
 import type { FeatureModule, PluginContext } from '../../src/core/types';
 import { SettingsStore } from '../../src/settings';
 import { supportScriptPath } from '../../src/support/installScripts';
@@ -76,7 +76,44 @@ describe('PluginRuntime', () => {
     expect(ready).toHaveBeenCalledTimes(1); // only "ok": broken never registered
     expect(out.lines.join('\n')).toMatch(/"broken" failed to register/);
     expect(out.lines.join('\n')).toMatch(/"flaky" ready failed/);
-    expect(Notice.shown.map((n) => n.message).join()).toMatch(/"broken" failed to load/);
+    // The Notice never shows the internal module id.
+    expect(Notice.shown.map((n) => n.message)).toEqual(['AI Terminal: a part of AI Terminal failed to load. Reload the plugin; details are in the developer console.']);
+  });
+
+  it('a failing module with a plain label is named by that label in the Notice, never by its id', async () => {
+    const { runtime } = makeRuntime();
+    await runtime.start([
+      { id: 'close-flow', label: 'close confirmation', register: () => {
+        throw new Error('nope');
+      } },
+    ]);
+    await runtime.ctx.ready;
+    expect(Notice.shown.map((n) => n.message)).toEqual(['AI Terminal: close confirmation failed to load. Reload the plugin; details are in the developer console.']);
+    expect(Notice.shown[0]!.message).not.toContain('close-flow');
+  });
+
+  it('every real feature module has a plain label', async () => {
+    const factories = [
+      (await import('../../src/env/index')).createEnvModule,
+      (await import('../../src/pty/index')).createPtyModule,
+      (await import('../../src/session/index')).createSessionModule,
+      (await import('../../src/terminal/index')).createTerminalModule,
+      (await import('../../src/terminal/keyboardModule')).createKeyboardModule,
+      (await import('../../src/terminal/closeFlowModule')).createCloseFlowModule,
+      (await import('../../src/session/resumeModule')).createResumeModule,
+      (await import('../../src/bridge/index')).createBridgeModule,
+      (await import('../../src/bridge/ideModule')).createIdeModule,
+      (await import('../../src/bridge/agyModule')).createAgyModule,
+      (await import('../../src/snapshot/index')).createSnapshotModule,
+      (await import('../../src/snapshot/restoreModule')).createRestoreModule,
+    ] as Array<() => FeatureModule>;
+    expect(new Set(factories.map((f) => f().id)).size).toBe(12);
+    for (const create of factories) {
+      const mod = create();
+      expect(mod.label, mod.id).toMatch(/^[a-z][a-z ]+[a-z]$/i);
+      expect(mod.label).not.toContain('-');
+      expect(loadFailureNotice(mod)).toContain(mod.label!);
+    }
   });
 
   it('the ready gate resolves after the timeout when a module hangs', async () => {

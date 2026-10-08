@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_SHELL,
+  SHELL_ENV_TIMEOUT_MS,
   ShellEnv,
   buildSpawnEnv,
   parseEnvBlock,
@@ -197,6 +198,21 @@ describe('ShellEnv fallback (R3.3)', () => {
     writeFileSync(notExec, '');
     const env2 = new ShellEnv({ shell: notExec, baseEnv: { ...BASE, SHELL: notExec }, homeDir: dir, run: runner(), timeoutMs: 4_000 });
     expect(env2.shell).toBe(DEFAULT_SHELL);
+  });
+
+  it('the capture times out after 5 s by default (R3.3)', async () => {
+    expect(SHELL_ENV_TIMEOUT_MS).toBe(5_000);
+    const dir = mkdtempSync(join(tmpdir(), 'shellenv-'));
+    const shell = writeScript(join(dir, 'slowsh'), 'sleep 30\n');
+    const timers = vi.spyOn(globalThis, 'setTimeout');
+    const env = new ShellEnv({ shell, baseEnv: BASE, homeDir: dir, run: runner() });
+    const pending = env.capture();
+    await waitFor(() => timers.mock.calls.some(([, ms]) => ms === 5_000), 2_000);
+    expect(timers.mock.calls.filter(([, ms]) => ms === 5_000)).toHaveLength(1);
+    timers.mockRestore();
+    env.dispose();
+    await pending;
+    expect(env.status).toBe('fallback');
   });
 
   it('serves the fallback environment before the capture finishes, and dispose() stops the capture', async () => {

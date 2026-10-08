@@ -86,6 +86,7 @@ export function createSnapshotModule(options: SnapshotModuleOptions = {}): Featu
 
   return {
     id: 'snapshot',
+    label: 'snapshots',
     register(ctx) {
       const log = ctx.log.child('snapshot');
       const hookPath = ctx.supportScripts.register(SNAPSHOT_HOOK_SCRIPT);
@@ -139,11 +140,15 @@ export function createSnapshotModule(options: SnapshotModuleOptions = {}): Featu
           waitMs: options.spawnWaitMs,
         }),
       );
+      // The hook posts to the bridge server's `/snapshot`, so keep that server up while snapshots are on or "not asked
+      // yet" (deviation 8) — also with the bridge tools off (deviation 19). Missing git: the endpoint answers "disabled".
+      const bridge = ctx.services.get('bridgeServer');
+      if (bridge) ctx.onUnload(bridge.keepRunningWhile('snapshots', () => ctx.settings.snapshots.enabled !== false));
       ctx.spawn.add(
         'snapshot:claude-hook',
         createClaudeHookContributor({
           wantsHook: () => svc.isAvailable() && ctx.settings.snapshots.enabled !== false,
-          getServer: () => (ctx.settings.bridgeEnabled ? ctx.services.get('bridgeServer') : undefined),
+          getServer: () => ctx.services.get('bridgeServer'),
           resolvePython: () => {
             const python = ctx.services.get('python');
             return python ? python.resolve() : Promise.reject(new Error('the python service is not available'));

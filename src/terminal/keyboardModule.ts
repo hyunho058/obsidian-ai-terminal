@@ -17,6 +17,7 @@ export interface KeyboardModuleOptions {
 export function createKeyboardModule(options: KeyboardModuleOptions = {}): FeatureModule {
   return {
     id: 'keyboard',
+    label: 'keyboard handling',
     register(ctx) {
       const log = ctx.log.child('keyboard');
       const terminals = ctx.services.require('terminals');

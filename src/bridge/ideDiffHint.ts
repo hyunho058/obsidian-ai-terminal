@@ -83,18 +83,23 @@ export interface DiffToolHintDeps {
 
 /**
  * Returns the hint text for the spawn that should show it, else undefined. Shown at most once per vault: concurrent
- * spawns don't both get it, and once shown it is never repeated. `diffTool: "terminal"` → no hint and nothing recorded
- * (checked again on the next Claude spawn). Never throws; Claude's config is only read.
+ * spawns don't both get it, and once shown it is never repeated. `diffTool: "terminal"` → no hint and nothing recorded;
+ * that answer is kept for this plugin load (Claude's config, which can be large, is not read again on every Claude
+ * spawn) and checked again after a reload. Never throws; Claude's config is only read.
  */
 export function createDiffToolHint(deps: DiffToolHintDeps): () => Promise<string | undefined> {
   const read = deps.readDiffTool ?? ((file: string) => readClaudeDiffTool(file));
   let checking = false;
+  let terminalSeen = false;
   return async () => {
-    if (checking || deps.isShown()) return undefined;
+    if (checking || terminalSeen || deps.isShown()) return undefined;
     checking = true;
     try {
       const value = await read(await deps.configFile());
-      if (value === 'terminal') return undefined;
+      if (value === 'terminal') {
+        terminalSeen = true;
+        return undefined;
+      }
       try {
         await deps.markShown();
       } catch (err) {

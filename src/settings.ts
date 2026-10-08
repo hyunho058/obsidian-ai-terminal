@@ -28,7 +28,7 @@ export interface AiTerminalSettings {
   scrollback: number;
   /** Option key acts as Meta (D10). */
   optionIsMeta: boolean;
-  /** HTTP MCP bridge (D27b). */
+  /** HTTP MCP bridge tools (D27b). Off: no `/mcp`; the server still runs for snapshots (deviation 19). */
   bridgeEnabled: boolean;
   /** Claude Code IDE connection (D27a). */
   ideConnectionEnabled: boolean;
@@ -37,8 +37,8 @@ export interface AiTerminalSettings {
   /** `enabled: null` = not asked yet (D31). */
   snapshots: { enabled: boolean | null };
   /**
-   * Free-form persisted state for feature modules, keyed by module id (e.g. T8's per-vault port + token
-   * fallback). Not shown in the settings tab. Use `ctx.settings.moduleData[id]` + `ctx.saveSettings()`.
+   * Free-form persisted state for feature modules, keyed by module id (e.g. `ide.diffHintShown`, D35). Not shown in
+   * the settings tab; never holds tokens. Use `ctx.settings.moduleData[id]` + `ctx.saveSettings()`.
    */
   moduleData: Record<string, unknown>;
 }
@@ -313,7 +313,7 @@ export class AiTerminalSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Obsidian bridge').setHeading();
     new Setting(containerEl)
       .setName('Bridge tools')
-      .setDesc('Let Claude Code and Antigravity read the open note / selection and open notes (local only, per-run token).')
+      .setDesc('Let the AI read your open note and selection.')
       .addToggle((tg) =>
         tg.setValue(s.bridgeEnabled).onChange((v) => {
           s.bridgeEnabled = v;

@@ -15,6 +15,7 @@ export function createSessionModule(options: SessionRegistryOptions = {}): Featu
   let registry: SessionRegistry | undefined;
   return {
     id: 'session',
+    label: 'terminal sessions',
     register(ctx) {
       const sessions = new SessionRegistry(ctx, options);
       registry = sessions;

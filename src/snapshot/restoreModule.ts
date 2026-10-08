@@ -46,6 +46,7 @@ export function createRestoreModule(options: RestoreModuleOptions = {}): Feature
 
   return {
     id: 'restore',
+    label: 'the restore command',
     register(ctx) {
       restorer = new Restorer({ vault: ctx.app.vault, log: ctx.log.child('restore') });
       ctx.plugin.addCommand({

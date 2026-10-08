@@ -149,11 +149,12 @@ describe('resume module + session registry', () => {
     expect(sink.text()).toContain(`${AGY_NOT_FOUND_NOTICE}\r\n`);
   });
 
-  it('new Antigravity panel and shells start plain', async () => {
+  it('new Antigravity panel and shells start plain; a restored shell starts fresh in the vault folder', async () => {
     const h = await harness();
     expect((await open(h, 'g1', 'agy', 'new')).proc.args).toEqual([]);
     const shell = await open(h, 's1', 'shell', 'restore');
     expect(shell.proc.args).toEqual(['-l']);
+    expect(shell.proc.opts.cwd).toBe(h.ctx.vaultPath);
     expect(shell.session.sessionId).toBeUndefined();
   });
 });

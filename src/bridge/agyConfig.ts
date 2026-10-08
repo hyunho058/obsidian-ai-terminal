@@ -6,6 +6,7 @@ import * as path from 'path';
 import { findOnPath } from '../pty/python';
 import { supportDir } from '../support/installScripts';
 import type { Logger } from '../util/log';
+import { isExecutableFile, isPidAlive } from '../util/process';
 import { MCP_SERVER_NAME } from './claudeMcpContributor';
 
 /** Basename of the bundled shim; installed to `~/.config/obsidian-ai-terminal/mcp_shim.py` (R11.9). */
@@ -72,12 +73,26 @@ export function parseMcpList(stdout: string): AgyListEntry[] | null {
   return entries;
 }
 
-/** The COMMAND/URL text `agy mcp list` shows for our entry. */
-export function shimCommandLine(python: string, shimPath: string): string {
-  return `${python} ${shimPath}`;
+/**
+ * Python's isolated mode for the shim: no script folder / user site-packages on `sys.path`, `PYTHON*` variables ignored —
+ * nothing next to the shim or in the user's Python setup can change what agy runs (deviation 19).
+ */
+export const PYTHON_ISOLATED_FLAG = '-I';
+
+/** Arguments after `agy mcp add obsidian --`: `<python> -I <shim>`. */
+export function shimCommand(python: string, shimPath: string): string[] {
+  return [python, PYTHON_ISOLATED_FLAG, shimPath];
 }
 
-/** True if an entry named `obsidian` was created by this plugin (a stdio entry running some `mcp_shim.py`). */
+/** The COMMAND/URL text `agy mcp list` shows for our entry (command and args joined by single spaces). */
+export function shimCommandLine(python: string, shimPath: string): string {
+  return shimCommand(python, shimPath).join(' ');
+}
+
+/**
+ * True if an entry named `obsidian` was created by this plugin: a stdio entry running some `mcp_shim.py`, either the
+ * current `<python> -I <shim>` or the older `<python> <shim>` (which `ensureEntry` updates once to the current form).
+ */
 export function isShimEntry(entry: AgyListEntry): boolean {
   return entry.type === 'stdio' && (entry.command === SHIM_SCRIPT || entry.command.endsWith(`/${SHIM_SCRIPT}`));
 }
@@ -164,16 +179,6 @@ interface LockInfo {
   pid: number;
   nonce: string;
   createdAt: number;
-}
-
-function pidAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'EPERM';
-  }
 }
 
 /**
@@ -264,7 +269,7 @@ export class FileLock {
       return true;
     }
     const old = Date.now() - stat.mtimeMs > this.staleMs;
-    const dead = typeof info?.pid === 'number' && info.pid !== process.pid && !pidAlive(info.pid);
+    const dead = typeof info?.pid === 'number' && info.pid !== process.pid && !isPidAlive(info.pid);
     if (!old && !dead) return false;
     const aside = `${this.file}.stale-${process.pid}-${randomUUID()}`;
     try {
@@ -292,13 +297,16 @@ export class FileLock {
 
 export type EnsureOutcome =
   | { status: 'added' | 'updated' | 'unchanged' }
-  /** An `obsidian` entry exists that this plugin did not create; it is left alone. */
-  | { status: 'foreign'; command: string }
+  /**
+   * An `obsidian` entry exists that this plugin did not create; it is left alone. Its command / URL is deliberately not
+   * kept (it may hold a secret), so it can never reach a Notice or a log line.
+   */
+  | { status: 'foreign' }
   | { status: 'skipped' | 'failed'; reason: string };
 
 export type RemoveOutcome =
   | { status: 'removed' | 'absent' }
-  | { status: 'foreign'; command: string }
+  | { status: 'foreign' }
   | { status: 'skipped' | 'failed'; reason: string };
 
 export const AGY_NOT_FOUND = 'agy not found';
@@ -320,7 +328,7 @@ export interface AgyConfigOptions {
 }
 
 /**
- * Manages the global agy entry `obsidian` → `<python3> ~/.config/obsidian-ai-terminal/mcp_shim.py` (D28, R11.3–R11.5,
+ * Manages the global agy entry `obsidian` → `<python3> -I ~/.config/obsidian-ai-terminal/mcp_shim.py` (D28, R11.3–R11.5,
  * R11.8) through `agy mcp list / add / remove` only — the config file itself is never read or written here (it holds
  * other servers' secrets). Every operation runs under the cross-process lock file, one at a time per instance.
  */
@@ -341,12 +349,12 @@ export class AgyConfig {
     const cmd = raw === '~' ? home : raw.startsWith('~/') ? path.join(home, raw.slice(2)) : raw;
     if (cmd.includes('/')) {
       const abs = path.resolve(cmd);
-      return isExecutable(abs) ? abs : null;
+      return isExecutableFile(abs) ? abs : null;
     }
     return findOnPath(cmd, this.opts.getEnv().PATH ?? '')[0] ?? null;
   }
 
-  /** Adds or updates the entry unless it already runs `<python> <shimPath>` (R11.4). Never rejects. */
+  /** Adds or updates the entry unless it already runs `<python> -I <shimPath>` (R11.4). Never rejects. */
   ensureEntry(python: string, shimPath: string): Promise<EnsureOutcome> {
     return this.enqueue(async (agy, step) => {
       const listed = await this.list(agy, step);
@@ -354,8 +362,8 @@ export class AgyConfig {
       const want = shimCommandLine(python, shimPath);
       const existing = listed.entries.find((e) => e.name === MCP_SERVER_NAME);
       if (existing && existing.type === 'stdio' && existing.command === want) return { status: 'unchanged' };
-      if (existing && !isShimEntry(existing)) return { status: 'foreign', command: existing.command };
-      const added = await step(['mcp', 'add', MCP_SERVER_NAME, '--', python, shimPath], this.writeTimeout());
+      if (existing && !isShimEntry(existing)) return { status: 'foreign' };
+      const added = await step(['mcp', 'add', MCP_SERVER_NAME, '--', ...shimCommand(python, shimPath)], this.writeTimeout());
       if (!added) return { status: 'skipped', reason: 'plugin unloading' };
       if (!ok(added)) return { status: 'failed', reason: `agy mcp add: ${describeRun(added)}` };
       if (existing?.status === 'disabled') {
@@ -374,7 +382,7 @@ export class AgyConfig {
       if ('reason' in listed) return { status: 'failed', reason: listed.reason };
       const existing = listed.entries.find((e) => e.name === MCP_SERVER_NAME);
       if (!existing) return { status: 'absent' };
-      if (!isShimEntry(existing)) return { status: 'foreign', command: existing.command };
+      if (!isShimEntry(existing)) return { status: 'foreign' };
       const removed = await step(['mcp', 'remove', MCP_SERVER_NAME], this.writeTimeout());
       if (!removed) return { status: 'skipped', reason: 'plugin unloading' };
       if (ok(removed)) return { status: 'removed' };
@@ -447,13 +455,3 @@ export class AgyConfig {
 
 /** Runs one agy call under the held lock; null once the plugin is unloading. */
 type Step = (args: string[], timeoutMs: number) => Promise<RunResult | null>;
-
-function isExecutable(p: string): boolean {
-  try {
-    if (!fs.statSync(p).isFile()) return false;
-    fs.accessSync(p, fs.constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}

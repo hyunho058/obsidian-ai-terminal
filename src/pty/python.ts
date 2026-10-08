@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { Logger } from '../util/log';
+import { isExecutableFile } from '../util/process';
 
 /** Shown in the panel when no usable interpreter exists (R2.5). */
 export const PYTHON_NOT_FOUND_MESSAGE = 'Python 3 not found — install it or set the path in Settings';
@@ -177,16 +178,6 @@ export function findOnPath(name: string, searchPath: string): string[] {
     if (isExecutableFile(full) && !out.includes(full)) out.push(full);
   }
   return out;
-}
-
-function isExecutableFile(p: string): boolean {
-  try {
-    if (!fs.statSync(p).isFile()) return false;
-    fs.accessSync(p, fs.constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function realpathOr(p: string): string {

@@ -1,13 +1,14 @@
 import type { SpawnContributor } from '../core';
+import { listensWithin } from '../util/wait';
 import { BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV } from './claudeMcpContributor';
-import type { BridgeServerService } from './httpServer';
+import type { BridgeEndpoint } from './httpServer';
 
 /** How long an agy spawn waits for a bridge server that is still starting. */
 export const AGY_START_WAIT_MS = 3000;
 
 export interface AgyEnvContributorOptions {
-  /** The running bridge server, or undefined when the bridge is disabled. */
-  getServer: () => BridgeServerService | undefined;
+  /** The bridge server, or undefined while the bridge tools are off (the shim needs `/mcp`). */
+  getServer: () => BridgeEndpoint | undefined;
   /** `settings.agyBridgeEnabled`, read at spawn time. */
   enabled: () => boolean;
   startWaitMs?: number;
@@ -28,16 +29,4 @@ export function createAgyEnvContributor(opts: AgyEnvContributorOptions): SpawnCo
     if (!baseUrl) return;
     return { env: { [BRIDGE_URL_ENV]: baseUrl, [BRIDGE_TOKEN_ENV]: server.token } };
   };
-}
-
-async function listensWithin(server: BridgeServerService, ms: number): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<boolean>((resolve) => {
-    timer = setTimeout(() => resolve(false), ms);
-  });
-  try {
-    return await Promise.race([server.whenListening().then(() => true, () => false), timeout]);
-  } finally {
-    clearTimeout(timer);
-  }
 }

@@ -1,5 +1,6 @@
 import type { FeatureModule, PluginContext } from '../core';
 import { notice, type Logger } from '../util/log';
+import { spawnEnv } from '../util/spawnEnv';
 import { createClaudeIdeContributor, type IdeEndpoint } from './claudeIdeContributor';
 import { claudeGlobalConfigFile, createDiffToolHint } from './ideDiffHint';
 import { IdeServer, type SelectionSource } from './ideServer';
@@ -50,6 +51,9 @@ export interface IdeModuleOptions {
  * left behind would look alive. These events remove it synchronously first.
  */
 const PAGE_UNLOAD_EVENTS = ['pagehide', 'unload'] as const;
+
+export const IDE_START_FAILED_NOTICE =
+  'AI Terminal: the Claude Code IDE connection could not start, so Claude will not see your selection automatically. Reload the plugin to try again.';
 
 class CancelledError extends Error {
   constructor() {
@@ -167,7 +171,7 @@ export function createIdeModule(options: IdeModuleOptions = {}): FeatureModule {
       if (err instanceof CancelledError || ctx.unloading) return;
       log.error('Claude Code IDE connection could not start', err);
       if (!failureNotified) {
-        notice('AI Terminal: the Claude Code IDE connection could not start — Claude will not see your selection automatically (the obsidian tools still work). See the developer console.');
+        notice(IDE_START_FAILED_NOTICE);
       }
       failureNotified = true;
     }
@@ -175,6 +179,7 @@ export function createIdeModule(options: IdeModuleOptions = {}): FeatureModule {
 
   return {
     id: 'ide',
+    label: 'the Claude Code IDE connection',
     register(ctx) {
       const log = ctx.log.child('ide');
       // Looked up when used: bridgeState belongs to the bridge module (registered earlier).
@@ -239,13 +244,4 @@ interface IdeModuleData {
 function ideData(ctx: PluginContext): IdeModuleData {
   const data = ctx.settings.moduleData.ide;
   return data && typeof data === 'object' && !Array.isArray(data) ? (data as IdeModuleData) : {};
-}
-
-/** The environment Claude will see (login-shell layer), so `$CLAUDE_CONFIG_DIR` from the user's profile counts. */
-function spawnEnv(ctx: PluginContext): Readonly<Record<string, string | undefined>> {
-  try {
-    return ctx.services.get('shellEnv')?.getSpawnEnv() ?? process.env;
-  } catch {
-    return process.env;
-  }
 }

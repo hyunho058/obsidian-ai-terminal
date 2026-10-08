@@ -98,7 +98,7 @@ export class PluginRuntime {
         this.registered.add(mod);
       } catch (err) {
         this.log.error(`module "${mod.id}" failed to register`, err);
-        notice(`AI Terminal: "${mod.id}" failed to load — see the developer console.`);
+        notice(loadFailureNotice(mod));
       }
     }
     void this.runReadyPhase();
@@ -157,4 +157,10 @@ export class PluginRuntime {
       this.log.error(`${label} failed`, err);
     }
   }
+}
+
+/** One plain sentence for a part that failed to load — never the internal module id. */
+export function loadFailureNotice(mod: Pick<FeatureModule, 'label'>): string {
+  const what = mod.label?.trim() || 'a part of AI Terminal';
+  return `AI Terminal: ${what} failed to load. Reload the plugin; details are in the developer console.`;
 }

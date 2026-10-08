@@ -2,6 +2,9 @@ import { randomBytes } from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { isPidAlive } from '../util/process';
+
+export { isPidAlive };
 
 /** `ideName` in our lock files; also how stale-file cleanup recognises them (D29). */
 export const IDE_NAME = 'Obsidian';
@@ -38,17 +41,6 @@ export function workspaceFoldersFor(vaultPath: string): string[] {
     // vault path not resolvable: keep it as is
   }
   return folders;
-}
-
-/** `process.kill(pid, 0)`: alive unless ESRCH (EPERM = alive, owned by another user). Non-positive / non-integer = not judged alive. */
-export function isPidAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'EPERM';
-  }
 }
 
 /**

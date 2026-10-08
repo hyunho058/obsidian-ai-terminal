@@ -1,5 +1,6 @@
 import type { SpawnContributor } from '../core';
-import type { BridgeServerService } from './httpServer';
+import { listensWithin } from '../util/wait';
+import type { BridgeEndpoint } from './httpServer';
 
 /** Name of the MCP server as Claude Code shows it (`mcp__obsidian__get_active_note` …). */
 export const MCP_SERVER_NAME = 'obsidian';
@@ -28,7 +29,7 @@ export function claudeMcpConfig(mcpUrl: string): string {
  * to `~/.claude.json`, `~/.claude/settings.json` or `.mcp.json`. The `=` form matters: `--mcp-config` is variadic, so
  * the separate-value form would swallow following positional arguments.
  */
-export function createClaudeMcpContributor(getServer: () => BridgeServerService | undefined): SpawnContributor {
+export function createClaudeMcpContributor(getServer: () => BridgeEndpoint | undefined): SpawnContributor {
   return async (c) => {
     if (c.profile !== 'claude') return;
     const server = getServer();
@@ -42,17 +43,4 @@ export function createClaudeMcpContributor(getServer: () => BridgeServerService 
       env: { [BRIDGE_TOKEN_ENV]: server.token, [BRIDGE_URL_ENV]: baseUrl },
     };
   };
-}
-
-/** True if the server is (or becomes) listening within `ms`; false if it is disabled, failed or too slow. */
-async function listensWithin(server: BridgeServerService, ms: number): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<boolean>((resolve) => {
-    timer = setTimeout(() => resolve(false), ms);
-  });
-  try {
-    return await Promise.race([server.whenListening().then(() => true, () => false), timeout]);
-  } finally {
-    clearTimeout(timer);
-  }
 }
