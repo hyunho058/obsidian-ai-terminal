@@ -140,10 +140,13 @@ export function createSnapshotModule(options: SnapshotModuleOptions = {}): Featu
           waitMs: options.spawnWaitMs,
         }),
       );
-      // The hook posts to the bridge server's `/snapshot`, so keep that server up while snapshots are on or "not asked
-      // yet" (deviation 8) — also with the bridge tools off (deviation 19). Missing git: the endpoint answers "disabled".
-      const bridge = ctx.services.get('bridgeServer');
-      if (bridge) ctx.onUnload(bridge.keepRunningWhile('snapshots', () => ctx.settings.snapshots.enabled !== false));
+      // The hook posts to the bridge server's `/snapshot`, so keep that server in use while snapshots are on or "not
+      // asked yet" (deviation 8) — also with the bridge tools off (deviation 19). Missing git: the endpoint answers
+      // "disabled". Looked up when the bridge provides it, so the module order in main.ts does not matter; it still
+      // arrives before the ready gate (registration awaits each module).
+      void ctx.services.whenAvailable('bridgeServer').then((bridge) => {
+        if (!ctx.unloading) ctx.onUnload(bridge.keepRunningWhile('snapshots', () => ctx.settings.snapshots.enabled !== false));
+      });
       ctx.spawn.add(
         'snapshot:claude-hook',
         createClaudeHookContributor({

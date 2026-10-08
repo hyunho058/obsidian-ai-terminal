@@ -3,9 +3,10 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BRIDGE_TOKEN_ENV, createBridgeModule } from '../../src/bridge/index';
-import { createIdeModule, ideLockDir, isPidAlive, type IdeModuleOptions } from '../../src/bridge/ideModule';
+import { createIdeModule, IdeConnection, ideLockDir, isPidAlive, type IdeModuleOptions } from '../../src/bridge/ideModule';
+import type { FeatureModule } from '../../src/core/types';
 import type { BridgeState } from '../../src/bridge/state';
 import type { SpawnContext } from '../../src/core/spawn';
 import { createBridgeEnv, startRuntime } from '../bridge/helpers';
@@ -192,6 +193,28 @@ describe('ide module', () => {
     const again = await connect(ide.port!, authToken); // same token for the whole plugin load
     expect(again.ok).toBe(true);
     if (again.ok) clients.push(again.client);
+  });
+
+  it('a toggle before ready waits for the ready decision (after the stale lock clean-up), like the bridge', async () => {
+    const enable = vi.spyOn(IdeConnection.prototype, 'enable');
+    try {
+      // Turns the IDE connection on during registration, before any ready() ran.
+      const early: FeatureModule = {
+        id: 'early-toggle',
+        register(ctx) {
+          ctx.settings.ideConnectionEnabled = true;
+          void ctx.saveSettings();
+        },
+      };
+      const rt = await startRuntime(createBridgeEnv(), [createBridgeModule({ debounceMs: 10 }), createIdeModule({ seedDelaysMs: [], windowTarget: null }), early], { ideConnectionEnabled: false });
+      runtimes.push(rt);
+      const ide = rt.ctx.services.require('ide');
+      expect(enable).toHaveBeenCalledTimes(1); // only ready() started it
+      expect(ide.isRunning()).toBe(true);
+      expect(lockFiles()).toEqual([`${ide.port}.lock`]);
+    } finally {
+      enable.mockRestore();
+    }
   });
 
   it('toggling off while starting leaves nothing behind', async () => {

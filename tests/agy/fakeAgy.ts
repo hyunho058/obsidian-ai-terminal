@@ -11,6 +11,10 @@ export interface FakeAgyControl {
   delayMs?: number;
   /** Subcommands that fail with exit 1 (e.g. `['list']`). */
   fail?: string[];
+  /** stdout of a failing subcommand (default none). */
+  failStdout?: string;
+  /** stderr of a failing subcommand (default `Error: simulated failure of <sub>`). */
+  failStderr?: string;
   /** Subcommands that hang until killed. */
   hang?: string[];
   /** Replaces the stdout of `mcp list`. */
@@ -62,7 +66,7 @@ if (args[0] !== 'mcp') exit(1, '', 'Error: unexpected command\n');
 const sub = args[1];
 if ((control.hang || []).includes(sub)) { setInterval(() => {}, 1000); return; }
 sleep(control.delayMs || 0);
-if ((control.fail || []).includes(sub)) exit(1, '', 'Error: simulated failure of ' + sub + '\n');
+if ((control.fail || []).includes(sub)) exit(1, control.failStdout || '', control.failStderr !== undefined ? control.failStderr : 'Error: simulated failure of ' + sub + '\n');
 const load = () => {
   if (!fs.existsSync(cfgPath)) return { mcpServers: {} };
   const raw = fs.readFileSync(cfgPath, 'utf8');

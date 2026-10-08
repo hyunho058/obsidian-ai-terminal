@@ -5,9 +5,9 @@ import * as os from 'os';
 import * as path from 'path';
 import { findOnPath } from '../pty/python';
 import { supportDir } from '../support/installScripts';
-import type { Logger } from '../util/log';
+import { MCP_SERVER_NAME } from '../core/constants';
+import { redact, type Logger } from '../util/log';
 import { isExecutableFile, isPidAlive } from '../util/process';
-import { MCP_SERVER_NAME } from './claudeMcpContributor';
 
 /** Basename of the bundled shim; installed to `~/.config/obsidian-ai-terminal/mcp_shim.py` (R11.9). */
 export const SHIM_SCRIPT = 'mcp_shim.py';
@@ -165,12 +165,15 @@ function ok(r: RunResult): boolean {
   return r.code === 0 && !r.error && !r.timedOut;
 }
 
-/** One short line describing a failed run (agy's first stderr line; it never prints config values). */
-function describeRun(r: RunResult): string {
-  if (r.error) return r.error;
+/**
+ * One short line describing a failed run, for the log: agy's first stderr line, redacted. Never stdout — `agy mcp list`
+ * prints every server's command / URL, which may hold another server's secrets.
+ */
+export function describeRun(r: RunResult): string {
+  if (r.error) return redact(r.error);
   if (r.timedOut) return 'timed out';
-  const first = (r.stderr.trim() || r.stdout.trim()).split('\n', 1)[0] ?? '';
-  return `exit ${r.code ?? r.signal}${first ? `: ${first.slice(0, 200)}` : ''}`;
+  const first = r.stderr.trim().split('\n', 1)[0] ?? '';
+  return `exit ${r.code ?? r.signal}${first ? `: ${redact(first).slice(0, 200)}` : ''}`;
 }
 
 // --- lock -----------------------------------------------------------------------------------------------------------

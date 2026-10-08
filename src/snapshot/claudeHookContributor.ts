@@ -1,5 +1,4 @@
-import type { SpawnContributor } from '../core';
-import { BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV } from '../bridge/claudeMcpContributor';
+import { BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV, type SpawnContributor } from '../core';
 import type { BridgeEndpoint } from '../bridge/httpServer';
 import type { Logger } from '../util/log';
 import { listensWithin } from '../util/wait';

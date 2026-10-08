@@ -1,6 +1,5 @@
-import type { SpawnContributor } from '../core';
+import { BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV, type SpawnContributor } from '../core';
 import { listensWithin } from '../util/wait';
-import { BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV } from './claudeMcpContributor';
 import type { BridgeEndpoint } from './httpServer';
 
 /** How long an agy spawn waits for a bridge server that is still starting. */

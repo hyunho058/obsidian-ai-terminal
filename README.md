@@ -227,7 +227,7 @@ agy has no option to add a server for one session. So the plugin adds **one glob
 - A snapshot never stops your message. If it is slow, the message goes on after 10 seconds (Claude) or
   2 seconds (Antigravity). If it fails, the panel shows `[Snapshot failed: … — this message is not protected]`.
 - Turning off **"Bridge tools"** does **not** turn off snapshots. Claude panels still save a snapshot before each
-  message: the plugin keeps its small local server (127.0.0.1, with the token) running for snapshots only, without
+  message: the plugin's small local server (127.0.0.1, with the token) keeps working for snapshots only, without
   the AI tools. To stop snapshots, turn off **"AI session snapshots"**.
 
 ### Where the history lives
@@ -265,6 +265,12 @@ move to Obsidian's trash (`.trash/`).
   snapshots or the settings file. Claude and agy panels get it in their environment, so programs that run inside
   those panels (the AI's commands, its MCP servers) can use the bridge too. They can already read your vault files,
   so this gives them nothing new.
+- **The bridge keeps its port until the plugin stops.** If you turn off both "Bridge tools" and
+  "AI session snapshots", the local server does not close. It stays on the same port and answers every request
+  with "turned off". This way no other program can take that port while open panels still send their token to it.
+  When you turn a switch on again, panels that used it before work again without a restart. The port closes when
+  you turn the plugin off or quit Obsidian. If both switches are off when the plugin starts, the server starts only
+  when you turn one of them on.
 - **Your AI settings stay yours.** The plugin never changes the settings files of Claude Code or Antigravity.
   Claude gets the bridge only for each session it starts. The one exception is the `obsidian` entry in agy
   (see [Antigravity](#antigravity)). The plugin also writes a small lock file `~/.claude/ide/<port>.lock`
@@ -279,6 +285,9 @@ move to Obsidian's trash (`.trash/`).
 
 ## Troubleshooting
 
+- **How to reload the plugin** (some messages say "Reload the plugin"): open Settings › Community plugins, turn
+  **AI Terminal** off, then turn it on again. This closes the terminal panels and stops their programs, so open
+  new panels afterwards.
 - **"Command not found: claude — check Settings › Profiles"**. Obsidian started from the Dock may not see the same
   PATH as Terminal. In Terminal run `which claude` (or `which agy`). Copy the full path (for example
   `/Users/you/.local/bin/claude`) into Settings › AI Terminal › Profiles › "Claude Code command".

@@ -1,13 +1,9 @@
-import type { SpawnContributor } from '../core';
+import { BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV, MCP_SERVER_NAME, type SpawnContributor } from '../core';
 import { listensWithin } from '../util/wait';
 import type { BridgeEndpoint } from './httpServer';
 
-/** Name of the MCP server as Claude Code shows it (`mcp__obsidian__get_active_note` …). */
-export const MCP_SERVER_NAME = 'obsidian';
-/** Environment variables carrying the bridge's connection info into AI sessions (Claude here; agy shim / snapshot hook reuse them). */
-export const BRIDGE_TOKEN_ENV = 'OBSIDIAN_BRIDGE_TOKEN';
-/** `http://127.0.0.1:<port>` — no trailing slash; append `/mcp` or a route path such as `/snapshot`. */
-export const BRIDGE_URL_ENV = 'OBSIDIAN_BRIDGE_URL';
+// The names live in core/constants.ts; re-exported here for older imports.
+export { BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV, MCP_SERVER_NAME };
 /** How long a spawn waits for a bridge server that is still starting. */
 const START_WAIT_MS = 3000;
 

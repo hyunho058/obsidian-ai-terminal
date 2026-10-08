@@ -160,6 +160,8 @@ export class IdeConnection implements IdeService {
 export function createIdeModule(options: IdeModuleOptions = {}): FeatureModule {
   let conn: IdeConnection | null = null;
   let failureNotified = false;
+  /** False until `ready()` makes the first decision (after the stale lock clean-up); toggles before that wait for it. */
+  let decided = false;
   const lockDir = (): string => options.lockDir ?? ideLockDir();
 
   const enable = async (ctx: PluginContext, log: Logger): Promise<void> => {
@@ -205,7 +207,7 @@ export function createIdeModule(options: IdeModuleOptions = {}): FeatureModule {
         createClaudeIdeContributor(() => (ctx.settings.ideConnectionEnabled && conn === connection ? connection : undefined), { hint }),
       );
       ctx.onSettingsChange((s, prev) => {
-        if (s.ideConnectionEnabled === prev.ideConnectionEnabled || ctx.unloading) return;
+        if (!decided || s.ideConnectionEnabled === prev.ideConnectionEnabled || ctx.unloading) return;
         if (s.ideConnectionEnabled) void enable(ctx, log);
         else connection.disable();
       });
@@ -226,6 +228,7 @@ export function createIdeModule(options: IdeModuleOptions = {}): FeatureModule {
       } catch (err) {
         log.warn('stale IDE lock file cleanup failed', err);
       }
+      decided = true;
       if (ctx.settings.ideConnectionEnabled && !ctx.unloading) await enable(ctx, log);
     },
     unload() {

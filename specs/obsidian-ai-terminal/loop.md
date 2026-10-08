@@ -74,6 +74,8 @@ Each item must score **≥ 7/10**.
 18. **On program exit** the panel leaves the alternate screen and resets input modes so the exit prompt is visible.
 19. **Bridge tools off ≠ snapshots off** (iteration-1 decision): when `bridgeEnabled` is off but snapshots are on, the local server keeps running (127.0.0.1 + token) serving only `/snapshot`; `/mcp` and the MCP contributors are off. Also hardening: the agy relay is registered as `python -I <shim>`, and a foreign agy entry's command/URL is never shown in Notices or logs.
 
+20. **The local server keeps its port for the whole plugin session** (iteration-2 security decision): once started it is never closed until the plugin unloads; when neither Bridge tools nor snapshots need it, it refuses every request (after the token check) instead of freeing the port — so no other program can take over a port that running panels still send their token to.
+
 ## Autonomy Boundary
 
 **✅ Auto-fix (stay in the loop):** type/format errors; missing in-scope tests; bugs where code fails a sub-requirement's Given/When/Then without changing a Decision; docs/README/comments; local renames; behaviour-preserving refactors that keep Gate 1 green.
@@ -91,3 +93,19 @@ The loop exits only when **every** gate above passes and the Evidence Report is 
 ## Lessons  (self-learning — carried across runs of THIS contract)
 
 <!-- Append entries below. A fresh contract has none. -->
+
+### L1 — No-match shell globs in gate commands
+- cause: gate-fail
+- source: human-approved
+- form: gate1-command
+- status: active
+- check: `test ! -e ~/.config/obsidian-ai-terminal && test ! -e ~/.local/share/obsidian-ai-terminal && [ -z "$(find ~/.claude/ide -name '*.lock' -exec grep -l '"ideName": *"Obsidian"' {} + 2>/dev/null)" ]`
+- note: zsh aborts on a glob that matches nothing (`~/.claude/ide/*.lock` with an empty folder), which failed the real-state check in iteration 1; gate commands must use `find`, never bare globs.
+
+### L2 — Every GUI-only requirement needs a README checklist step
+- cause: gate-fail
+- source: human-approved
+- form: gate1-command
+- status: active
+- check: `npx vitest run tests/readme.test.ts`
+- note: iteration 1 found 12 sub-requirements with neither a test nor a checklist step; tests/readme.test.ts now asserts the Safety section and that each in-app item has a checklist step with an "Expect:" line — keep it green and extend it when adding GUI-only requirements.

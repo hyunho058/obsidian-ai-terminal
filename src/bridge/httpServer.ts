@@ -11,18 +11,34 @@ export const BRIDGE_HOST = '127.0.0.1';
 export const MCP_PATH = '/mcp';
 /** Larger request bodies get 413. */
 export const MAX_BODY_BYTES = 4 * 1024 * 1024;
+/** Status of a refused request (right token, but the feature it asks for is turned off). */
+export const REFUSED_STATUS = 403;
+/** `/mcp` while the Bridge tools setting is off (shown by agy through mcp_shim.py). */
+export const TOOLS_OFF_MESSAGE = 'Obsidian bridge tools are turned off in the AI Terminal settings.';
+/** Any request while nothing uses the server (Bridge tools and snapshots both off). */
+export const NOT_IN_USE_MESSAGE = 'The Obsidian bridge is not in use: Bridge tools and AI session snapshots are turned off in the AI Terminal settings.';
+
+/** `start()` gave up because the server was disposed (plugin unload) — not a failure worth a Notice. */
+export class BridgeStartAbortedError extends Error {
+  constructor() {
+    super('The Obsidian bridge server was closed while starting.');
+    this.name = 'BridgeStartAbortedError';
+  }
+}
 
 /** Where the bridge server listens and its token — what spawn contributors need. */
 export interface BridgeEndpoint {
-  /** MCP endpoint, `http://127.0.0.1:<port>/mcp`; null while not listening. */
+  /** MCP endpoint, `http://127.0.0.1:<port>/mcp`; null until the server listens. */
   readonly url: string | null;
-  /** `http://127.0.0.1:<port>` (no trailing slash); null while not listening. Append a route path, e.g. `/snapshot`. */
+  /** `http://127.0.0.1:<port>` (no trailing slash); null until the server listens. Append a route path, e.g. `/snapshot`. */
   readonly baseUrl: string | null;
+  /** Fixed for the whole plugin session once listening (deviation 20). */
   readonly port: number | null;
   /** Per-run bearer token (registered with the redacting logger). Stays the same while the plugin is loaded. */
   readonly token: string;
-  /** Resolves once listening; rejects if the server is disabled / stopped or fails to start. */
+  /** Resolves once listening; rejects if nothing has needed the server yet in this plugin session, or it failed to start. */
   whenListening(): Promise<void>;
+  /** The port is bound (it stays bound until the plugin unloads). */
   isRunning(): boolean;
 }
 
@@ -30,13 +46,19 @@ export interface BridgeEndpoint {
  * The `bridgeServer` service (D11, D27b, R9): the bridge's HTTP server on `127.0.0.1:<random port>`. Every request needs
  * `Authorization: Bearer <token>`; `/mcp` is the MCP Streamable HTTP endpoint (stateless, JSON responses — POST only)
  * while the bridge tools are on, every other path goes to `ctx.routes` (e.g. T9's `POST /snapshot`). One server per
- * plugin instance = per vault (D12). It listens while the bridge tools are on or another module needs its routes
- * (deviation 19: snapshots keep `/snapshot` with the tools off — `/mcp` then answers 404).
+ * plugin instance = per vault (D12). It is *in use* while the bridge tools are on or another module needs its routes
+ * (deviation 19: snapshots keep `/snapshot` with the tools off — `/mcp` is then refused).
+ * Deviation 20: the port is bound the first time the server is in use and stays bound until the plugin unloads, so no
+ * other program can take a port that running panels still send their token to. While it is not in use, every request
+ * is refused (403, after the 401 token check) with a JSON-RPC error body that says why.
  */
 export interface BridgeServerService extends BridgeEndpoint {
+  /** True while the bridge tools are on or a `keepRunningWhile` reason is needed; otherwise requests are refused. */
+  isServing(): boolean;
   /**
-   * Keeps the server listening while `needed()` is true, even with the bridge tools off. Checked when the plugin
-   * becomes ready and after every settings change, so `needed` should depend on settings only. Returns a disposer.
+   * Keeps the server in use while `needed()` is true, even with the bridge tools off (the first need binds the port).
+   * Checked when the plugin becomes ready, after every settings change and on every request, so `needed` should depend
+   * on settings only. Returns a disposer.
    */
   keepRunningWhile(reason: string, needed: () => boolean): Disposer;
 }
@@ -54,7 +76,7 @@ export interface BridgeHttpServerOptions {
   log: Logger;
   /** Fixed token (tests); default `crypto.randomUUID()`. */
   token?: string;
-  /** Whether `/mcp` is served (the bridge tools setting); read per request. Default: always. Off → 404. */
+  /** Whether `/mcp` is served (the bridge tools setting); read per request. Default: always. Off → refused (403). */
   serveMcp?: () => boolean;
   /** Called when a `keepRunningWhile` reason is added or removed. */
   onDemandChange?: () => void;
@@ -72,8 +94,7 @@ export class BridgeHttpServer implements BridgeServerService {
   private startPromise: Promise<void> | null = null;
   private abortStart: (() => void) | null = null;
   private currentPort: number | null = null;
-  /** Port of the previous run: reused on restart so sessions started earlier can reconnect. */
-  private lastPort = 0;
+  private disposed = false;
   private readonly demands = new Map<symbol, { reason: string; needed: () => boolean }>();
 
   constructor(private readonly opts: BridgeHttpServerOptions) {
@@ -102,7 +123,11 @@ export class BridgeHttpServer implements BridgeServerService {
   whenListening(): Promise<void> {
     if (this.phase === 'running') return Promise.resolve();
     if (this.phase === 'starting' && this.startPromise) return this.startPromise;
-    return Promise.reject(new Error('The Obsidian bridge server is not running (disabled in settings or stopped).'));
+    return Promise.reject(new Error('The Obsidian bridge server is not running (not needed yet, failed to start, or closed).'));
+  }
+
+  isServing(): boolean {
+    return this.toolsOn() || this.neededFor().length > 0;
   }
 
   keepRunningWhile(reason: string, needed: () => boolean): Disposer {
@@ -127,8 +152,9 @@ export class BridgeHttpServer implements BridgeServerService {
     return reasons;
   }
 
-  /** Starts listening (no-op while starting / running). */
+  /** Binds a random free port (no-op while starting / running). Once bound, only `dispose()` closes it (deviation 20). */
   start(): Promise<void> {
+    if (this.disposed) return Promise.reject(new BridgeStartAbortedError());
     if (this.phase !== 'stopped' && this.startPromise) return this.startPromise;
     const server = http.createServer((req, res) => void this.handle(req, res));
     server.on('connection', (socket: Socket) => {
@@ -151,17 +177,13 @@ export class BridgeHttpServer implements BridgeServerService {
         server.once('listening', onListening);
         server.listen({ port, host: BRIDGE_HOST, exclusive: true });
       });
-    // stop() during listen(): Node then never emits 'listening' (nor 'error'), so stop() rejects through this hook.
+    // dispose() during listen(): Node then never emits 'listening' (nor 'error'), so dispose() rejects through this hook.
     let abort!: () => void;
     const aborted = new Promise<never>((_, reject) => {
-      abort = () => reject(new Error('The Obsidian bridge server was stopped while starting.'));
+      abort = () => reject(new BridgeStartAbortedError());
     });
     this.abortStart = abort;
-    const listening = listen(this.lastPort).catch((err: NodeJS.ErrnoException) => {
-      if (this.lastPort !== 0 && err.code === 'EADDRINUSE' && this.server === server) return listen(0);
-      throw err;
-    });
-    const promise = Promise.race([listening, aborted])
+    const promise = Promise.race([listen(0), aborted])
       .finally(() => {
         if (this.abortStart === abort) this.abortStart = null;
       })
@@ -169,10 +191,9 @@ export class BridgeHttpServer implements BridgeServerService {
         () => {
           if (this.server !== server) {
             server.close();
-            throw new Error('The Obsidian bridge server was stopped while starting.');
+            throw new BridgeStartAbortedError();
           }
           this.currentPort = (server.address() as AddressInfo).port;
-          this.lastPort = this.currentPort;
           this.phase = 'running';
           server.on('error', (err) => this.opts.log.error('bridge server error', err));
           this.opts.log.info(`bridge listening on ${this.url}`);
@@ -187,8 +208,17 @@ export class BridgeHttpServer implements BridgeServerService {
     return promise;
   }
 
-  /** Closes the port and drops every connection — synchronous, so it completes during plugin unload (R9.5). */
-  stop(): void {
+  /**
+   * Plugin unload: closes the port, drops every connection and forgets the token — synchronous, so it completes during
+   * unload (R9.5). The server cannot start again afterwards.
+   */
+  dispose(): void {
+    this.disposed = true;
+    this.close();
+    this.unregisterSecret();
+  }
+
+  private close(): void {
     const server = this.server;
     if (!server) return;
     this.reset();
@@ -200,10 +230,8 @@ export class BridgeHttpServer implements BridgeServerService {
     this.opts.log.info('bridge stopped');
   }
 
-  /** `stop()` and forget the token (plugin unload). */
-  dispose(): void {
-    this.stop();
-    this.unregisterSecret();
+  private toolsOn(): boolean {
+    return this.opts.serveMcp ? this.opts.serveMcp() : true;
   }
 
   private reset(): void {
@@ -228,12 +256,16 @@ export class BridgeHttpServer implements BridgeServerService {
         return;
       }
       const path = (req.url ?? '/').split('?', 1)[0] ?? '/';
+      // Refusals come after the token check, so only the token holder learns why (deviations 19, 20).
+      if (path === MCP_PATH && !this.toolsOn()) {
+        refuse(req, res, TOOLS_OFF_MESSAGE);
+        return;
+      }
+      if (!this.isServing()) {
+        refuse(req, res, NOT_IN_USE_MESSAGE);
+        return;
+      }
       if (path === MCP_PATH) {
-        if (this.opts.serveMcp && !this.opts.serveMcp()) {
-          sendJson(res, 404, { error: 'not_found', message: 'The Obsidian bridge tools are turned off in the AI Terminal settings.' });
-          req.resume();
-          return;
-        }
         await this.handleMcp(req, res);
         return;
       }
@@ -286,6 +318,11 @@ export class BridgeHttpServer implements BridgeServerService {
 
 function rpcError(code: number, message: string): unknown {
   return { jsonrpc: '2.0', error: { code, message }, id: null };
+}
+
+function refuse(req: http.IncomingMessage, res: http.ServerResponse, message: string): void {
+  sendJson(res, REFUSED_STATUS, rpcError(-32000, message));
+  req.resume();
 }
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {

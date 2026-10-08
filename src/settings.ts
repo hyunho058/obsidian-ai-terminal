@@ -28,7 +28,7 @@ export interface AiTerminalSettings {
   scrollback: number;
   /** Option key acts as Meta (D10). */
   optionIsMeta: boolean;
-  /** HTTP MCP bridge tools (D27b). Off: no `/mcp`; the server still runs for snapshots (deviation 19). */
+  /** HTTP MCP bridge tools (D27b). Off: `/mcp` is refused; the server still serves snapshots (deviations 19, 20). */
   bridgeEnabled: boolean;
   /** Claude Code IDE connection (D27a). */
   ideConnectionEnabled: boolean;
@@ -313,7 +313,7 @@ export class AiTerminalSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Obsidian bridge').setHeading();
     new Setting(containerEl)
       .setName('Bridge tools')
-      .setDesc('Let the AI read your open note and selection.')
+      .setDesc('Let the AI read your open note, selection and links, and open notes. Snapshots keep working when this is off.')
       .addToggle((tg) =>
         tg.setValue(s.bridgeEnabled).onChange((v) => {
           s.bridgeEnabled = v;

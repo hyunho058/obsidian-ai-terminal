@@ -7,7 +7,8 @@ agy starts it with agy's own environment (verified with agy 1.3.0), so:
   * agy started by the Obsidian plugin has OBSIDIAN_BRIDGE_URL (http://127.0.0.1:<port>, no trailing slash) and
     OBSIDIAN_BRIDGE_TOKEN; every newline-delimited JSON-RPC message from stdin is POSTed to <URL>/mcp with the bearer
     token (Streamable HTTP, stateless) and every JSON-RPC message of the answer is written to stdout, one per line.
-    HTTP / network failures become JSON-RPC errors for requests.
+    HTTP / network failures become JSON-RPC errors for requests, with the plugin's own message when it sent one
+    (e.g. "Obsidian bridge tools are turned off in the AI Terminal settings.").
   * agy started anywhere else has neither variable: the shim answers `initialize` itself, lists no tools, and
     answers `tools/call` with a tool error. Nothing is ever written to stderr.
 
@@ -193,10 +194,21 @@ class Bridge:
             return 1
         if status == 401:
             raise BridgeError("Obsidian bridge rejected the request (HTTP 401) — the plugin was reloaded; restart agy from Obsidian")
-        detail = payload["error"].get("message") if rpc_error else None
-        if isinstance(detail, str) and detail:
+        detail = error_message(payload)
+        if detail:
             raise BridgeError("Obsidian bridge error (HTTP %d): %s" % (status, detail[:300]))
         raise BridgeError("Obsidian bridge error (HTTP %d)" % status)
+
+
+def error_message(payload):
+    """The plain message of an error body: JSON-RPC `error.message` (how the plugin refuses), or a top-level `message`."""
+    if not isinstance(payload, dict):
+        return None
+    error = payload.get("error")
+    for value in (error.get("message") if isinstance(error, dict) else None, payload.get("message")):
+        if isinstance(value, str) and value.strip():
+            return " ".join(value.split())
+    return None
 
 
 def read_sse(resp, emit):

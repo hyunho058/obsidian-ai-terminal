@@ -4,7 +4,7 @@ import * as http from 'node:http';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createBridgeModule } from '../../src/bridge/index';
+import { createBridgeModule, NOT_IN_USE_MESSAGE, TOOLS_OFF_MESSAGE } from '../../src/bridge/index';
 import type { BeforeSpawnContext } from '../../src/core/events';
 import type { ProfileId } from '../../src/core/constants';
 import type { SpawnContext } from '../../src/core/spawn';
@@ -38,6 +38,8 @@ interface LoadOptions extends SnapshotModuleOptions {
   withHook?: boolean;
   /** Use the real first-use modal instead of the scripted answers. */
   realModal?: boolean;
+  /** Register the snapshot module before the bridge module (the module order must not matter). */
+  snapshotFirst?: boolean;
 }
 
 /** Loads the plugin runtime with the snapshot module (+ T6 bridge) over a temp vault. */
@@ -58,10 +60,9 @@ async function load(o: LoadOptions = {}) {
     pluginDir = tempDir('plugindir-');
     copyFileSync(HOOK_SOURCE, join(pluginDir, 'snapshot_hook.py'));
   }
-  const modules = [
-    ...(o.bridge === false ? [] : [createBridgeModule({ token: TOKEN })]),
-    createSnapshotModule({ checkGit: async () => ({ ok: true, version: 'git version test' }), ...o, openFirstUse }),
-  ];
+  const bridge = o.bridge === false ? [] : [createBridgeModule({ token: TOKEN })];
+  const snapshot = createSnapshotModule({ checkGit: async () => ({ ok: true, version: 'git version test' }), ...o, openFirstUse });
+  const modules = o.snapshotFirst ? [snapshot, ...bridge] : [...bridge, snapshot];
   const rt = await startRuntime({
     vault,
     modules,
@@ -452,7 +453,8 @@ describe('bridge tools off, snapshots on (deviation 19)', () => {
     expect(server.isRunning()).toBe(true);
     expect(server.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
     expect((await post(`${server.baseUrl}/mcp`, MCP_INIT)).status).toBe(401);
-    expect((await post(`${server.baseUrl}/mcp`, MCP_INIT, TOKEN)).status).toBe(404);
+    const mcp = await post(`${server.baseUrl}/mcp`, MCP_INIT, TOKEN);
+    expect(mcp).toEqual({ status: 403, json: { jsonrpc: '2.0', id: null, error: { code: -32000, message: TOOLS_OFF_MESSAGE } } });
     const body = JSON.stringify({ panelId: 'panel-1', prompt: 'tools are off', ai: 'claude' });
     expect((await post(snapshotUrl(rt), body)).status).toBe(401);
     const ok = await post(snapshotUrl(rt), body, TOKEN);
@@ -486,10 +488,11 @@ describe('bridge tools off, snapshots on (deviation 19)', () => {
     expect(has((await rt.ctx.spawn.resolve(spawnCtx('claude'))).args, '--settings=')).toBe(true);
   });
 
-  it('both off → no server, no hook, no --mcp-config; each toggle starts / stops the server', async () => {
+  it('both off from the start → nothing bound, no hook, no --mcp-config; the first toggle binds the port, which then stays (deviation 20)', async () => {
     const rt = await load({ bridgeEnabled: false, enabled: false });
     const server = rt.ctx.services.require('bridgeServer');
     expect(server.isRunning()).toBe(false);
+    expect(server.baseUrl).toBeNull();
     const off = await rt.ctx.spawn.resolve(spawnCtx('claude'));
     expect(off.args).toEqual([]);
     expect(off.env).toEqual({});
@@ -497,25 +500,69 @@ describe('bridge tools off, snapshots on (deviation 19)', () => {
     rt.ctx.settings.snapshots.enabled = true;
     await rt.ctx.saveSettings();
     await server.whenListening();
-    expect((await post(`${server.baseUrl}/mcp`, MCP_INIT, TOKEN)).status).toBe(404);
+    const base = server.baseUrl!;
+    expect((await post(`${base}/mcp`, MCP_INIT, TOKEN)).status).toBe(403);
     const on = await rt.ctx.spawn.resolve(spawnCtx('claude'));
     expect([has(on.args, '--settings='), has(on.args, '--mcp-config')]).toEqual([true, false]);
     await rt.service.whenIdle(); // the first full snapshot started by turning snapshots on
 
+    // Both off again: the port stays bound; with the token every request is refused, without it 401.
     rt.ctx.settings.snapshots.enabled = false;
     await rt.ctx.saveSettings();
-    expect(server.isRunning()).toBe(false);
+    expect(server.isRunning()).toBe(true);
+    expect(server.baseUrl).toBe(base);
+    const snap = JSON.stringify({ panelId: 'panel-7', prompt: 'p', ai: 'claude' });
+    expect((await post(`${base}/snapshot`, snap)).status).toBe(401);
+    expect(await post(`${base}/snapshot`, snap, TOKEN)).toEqual({ status: 403, json: { jsonrpc: '2.0', id: null, error: { code: -32000, message: NOT_IN_USE_MESSAGE } } });
+    expect((await post(`${base}/mcp`, MCP_INIT, TOKEN)).json).toMatchObject({ error: { message: TOOLS_OFF_MESSAGE } });
+    const none = await rt.ctx.spawn.resolve(spawnCtx('claude'));
+    expect([none.args, none.env]).toEqual([[], {}]);
 
     rt.ctx.settings.bridgeEnabled = true;
     await rt.ctx.saveSettings();
-    await server.whenListening();
+    expect(server.baseUrl).toBe(base);
     const tools = await rt.ctx.spawn.resolve(spawnCtx('claude'));
     expect([has(tools.args, '--settings='), has(tools.args, '--mcp-config=')]).toEqual([false, true]);
-    expect((await post(`${server.baseUrl}/mcp`, MCP_INIT, TOKEN)).status).toBe(200);
+    expect((await post(`${base}/mcp`, MCP_INIT, TOKEN)).status).toBe(200);
+    // Snapshots off but the server in use for the tools: the endpoint itself answers "disabled".
+    expect((await post(`${base}/snapshot`, snap, TOKEN)).json).toMatchObject({ status: 'disabled' });
 
     rt.ctx.settings.bridgeEnabled = false;
     await rt.ctx.saveSettings();
-    expect(server.isRunning()).toBe(false);
+    expect(server.isRunning()).toBe(true);
+    expect((await post(`${base}/mcp`, MCP_INIT, TOKEN)).status).toBe(403);
+  });
+
+  it('a stale hook env (captured before both were turned off) snapshots again after snapshots are back on — same port and token', async () => {
+    const panel = fakePanel('claude', 'panel-7');
+    const rt = await load({ bridgeEnabled: false, panels: [panel] });
+    const plan = await rt.ctx.spawn.resolve(spawnCtx('claude'));
+    const url = `${plan.env.OBSIDIAN_BRIDGE_URL}/snapshot`;
+    const token = plan.env.OBSIDIAN_BRIDGE_TOKEN!;
+    rt.ctx.settings.snapshots.enabled = false;
+    await rt.ctx.saveSettings();
+    const body = JSON.stringify({ panelId: 'panel-7', prompt: 'after re-enable', ai: 'claude' });
+    expect((await post(url, body, token)).status).toBe(403);
+    rt.ctx.settings.snapshots.enabled = true;
+    await rt.ctx.saveSettings();
+    await rt.service.whenIdle();
+    // Served again (it may share the commit of the "Snapshots turned on" snapshot that is running at the same time).
+    const again = await post(url, body, token);
+    expect(again.status).toBe(200);
+    expect(again.json).toMatchObject({ status: 'committed', commit: expect.any(String) });
+  });
+
+  it('module order does not matter: snapshot registered before the bridge still keeps /snapshot served with the tools off', async () => {
+    const panel = fakePanel('claude', 'panel-7');
+    const rt = await load({ bridgeEnabled: false, panels: [panel], snapshotFirst: true });
+    const server = rt.ctx.services.require('bridgeServer');
+    expect(server.isRunning()).toBe(true);
+    expect(server.isServing()).toBe(true);
+    const plan = await rt.ctx.spawn.resolve(spawnCtx('claude'));
+    expect(has(plan.args, '--settings=')).toBe(true);
+    expect(plan.env).toMatchObject({ OBSIDIAN_BRIDGE_URL: server.baseUrl, OBSIDIAN_BRIDGE_TOKEN: TOKEN });
+    const ok = await post(snapshotUrl(rt), JSON.stringify({ panelId: 'panel-7', prompt: 'order', ai: 'claude' }), TOKEN);
+    expect(ok.json).toMatchObject({ status: 'committed' });
   });
 
   it('bridge on → unchanged: one server for /mcp and /snapshot, Claude gets both flags', async () => {

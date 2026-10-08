@@ -204,7 +204,8 @@ describe('AiTerminalSettingTab (R14.1, R14.2)', () => {
   it('the Bridge tools toggle is described in plain words (no MCP / token jargon)', () => {
     render();
     const bridge = Setting.created.find((s) => s.name === 'Bridge tools')!;
-    expect(bridge.desc).toBe('Let the AI read your open note and selection.');
+    expect(bridge.desc).toBe('Let the AI read your open note, selection and links, and open notes. Snapshots keep working when this is off.');
+    expect(bridge.desc).not.toMatch(/MCP|token|server/i);
   });
 
   it('edits persist and survive a reload', async () => {

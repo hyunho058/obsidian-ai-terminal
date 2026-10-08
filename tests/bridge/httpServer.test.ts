@@ -3,7 +3,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import * as http from 'node:http';
 import * as net from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BridgeHttpServer } from '../../src/bridge/httpServer';
+import { BridgeHttpServer, BridgeStartAbortedError, NOT_IN_USE_MESSAGE, TOOLS_OFF_MESSAGE } from '../../src/bridge/httpServer';
 import { BridgeError } from '../../src/bridge/paths';
 import type { BridgeStateService } from '../../src/bridge/state';
 import { BRIDGE_TOOL_NAMES, createBridgeMcpServer } from '../../src/bridge/tools';
@@ -168,24 +168,66 @@ describe('BridgeHttpServer (R9)', () => {
     expect((await request(port, { auth, body: '{not json' })).status).toBe(400);
   });
 
-  it('deviation 19: with serveMcp() false, /mcp answers 404 (after the token check) and routes still work', async () => {
+  it('deviation 19: with serveMcp() false, /mcp is refused (403, JSON-RPC error body, after the token check) and routes still work', async () => {
     const routes = new BridgeRouteRegistry();
     routes.addRoute('POST', '/snapshot', (_req, res) => void res.writeHead(200).end('ok'));
     let tools = false;
     const server = new BridgeHttpServer({ routes, createMcpServer: () => createBridgeMcpServer(fakeState()), log: createLogger('t', silentSink()), token: TOKEN, serveMcp: () => tools });
     servers.push(server);
+    server.keepRunningWhile('snapshots', () => true);
     await server.start();
     const port = server.port!;
     const auth = `Bearer ${TOKEN}`;
     expect((await request(port, { body: INIT })).status).toBe(401);
     expect((await request(port, { auth: 'Bearer wrong-token-0123456789', body: INIT })).status).toBe(401);
     const off = await request(port, { auth, body: INIT });
-    expect(off.status).toBe(404);
-    expect(JSON.parse(off.body)).toMatchObject({ error: 'not_found' });
-    expect((await request(port, { auth, method: 'GET', path: '/mcp' })).status).toBe(404);
+    expect(off.status).toBe(403);
+    expect(off.headers['content-type']).toBe('application/json');
+    expect(JSON.parse(off.body)).toEqual({ jsonrpc: '2.0', id: null, error: { code: -32000, message: TOOLS_OFF_MESSAGE } });
+    expect(TOOLS_OFF_MESSAGE).toBe('Obsidian bridge tools are turned off in the AI Terminal settings.');
+    expect((await request(port, { auth, method: 'GET', path: '/mcp' })).status).toBe(403);
     expect((await request(port, { auth, path: '/snapshot' })).status).toBe(200);
     tools = true; // read per request
     expect((await request(port, { auth, body: INIT })).status).toBe(200);
+  });
+
+  it('deviation 20: not in use → the port stays bound and every request is refused after the token check; in use again → served', async () => {
+    const routes = new BridgeRouteRegistry();
+    routes.addRoute('POST', '/snapshot', (_req, res) => void res.writeHead(200).end('ok'));
+    let tools = true;
+    let snapshots = false;
+    const server = new BridgeHttpServer({ routes, createMcpServer: () => createBridgeMcpServer(fakeState()), log: createLogger('t', silentSink()), token: TOKEN, serveMcp: () => tools });
+    servers.push(server);
+    server.keepRunningWhile('snapshots', () => snapshots);
+    await server.start();
+    const port = server.port!;
+    const auth = `Bearer ${TOKEN}`;
+    expect(server.isServing()).toBe(true);
+
+    tools = false;
+    expect(server.isServing()).toBe(false);
+    expect(server.isRunning()).toBe(true);
+    expect(server.port).toBe(port);
+    const connected = await new Promise<boolean>((resolve) => {
+      const s = net.connect({ host: '127.0.0.1', port });
+      s.on('connect', () => (s.destroy(), resolve(true)));
+      s.on('error', () => resolve(false));
+    });
+    expect(connected).toBe(true);
+    for (const path of ['/snapshot', '/mcp', '/nowhere']) expect((await request(port, { path, body: INIT })).status).toBe(401);
+    const route = await request(port, { auth, path: '/snapshot' });
+    expect(route.status).toBe(403);
+    expect(JSON.parse(route.body)).toEqual({ jsonrpc: '2.0', id: null, error: { code: -32000, message: NOT_IN_USE_MESSAGE } });
+    expect(JSON.parse((await request(port, { auth, path: '/nowhere' })).body).error.message).toBe(NOT_IN_USE_MESSAGE);
+    const mcp = await request(port, { auth, body: INIT });
+    expect([mcp.status, JSON.parse(mcp.body).error.message]).toEqual([403, TOOLS_OFF_MESSAGE]);
+
+    snapshots = true; // read per request: the route works again on the same port
+    expect((await request(port, { auth, path: '/snapshot' })).status).toBe(200);
+    expect((await request(port, { auth, body: INIT })).status).toBe(403);
+    tools = true;
+    expect((await request(port, { auth, body: INIT })).status).toBe(200);
+    expect(server.port).toBe(port);
   });
 
   it('keepRunningWhile: neededFor() lists the reasons needed now; a throwing check counts as not needed; disposers notify', () => {
@@ -216,7 +258,7 @@ describe('BridgeHttpServer (R9)', () => {
     expect((await request(server.port!, { auth: `Bearer ${TOKEN}`, path: '/boom' })).status).toBe(500);
   });
 
-  it('R9.5: stop() closes the port synchronously, drops open connections; restart reuses the port', async () => {
+  it('R9.5: dispose() closes the port synchronously and drops open connections; the server cannot start again', async () => {
     const { server } = await startServer();
     const port = server.port!;
     const client = await connect(server.url!);
@@ -225,23 +267,24 @@ describe('BridgeHttpServer (R9)', () => {
     socket.on('error', () => {});
     await new Promise((r) => socket.on('connect', r));
     const closed = new Promise((r) => socket.on('close', r));
-    server.stop();
+    server.dispose();
     expect(server.isRunning()).toBe(false);
     expect(server.url).toBeNull();
     await expect(server.whenListening()).rejects.toThrow(/not running/);
     await closed;
     await expect(request(port, { auth: `Bearer ${TOKEN}`, body: INIT })).rejects.toMatchObject({ code: 'ECONNREFUSED' });
-    await server.start();
-    expect(server.port).toBe(port);
+    await expect(server.start()).rejects.toBeInstanceOf(BridgeStartAbortedError);
+    expect(server.isRunning()).toBe(false);
   });
 
-  it('stop() while starting leaves nothing listening', async () => {
+  it('dispose() while starting leaves nothing listening and rejects the start with BridgeStartAbortedError', async () => {
     const server = new BridgeHttpServer({ routes: new BridgeRouteRegistry(), createMcpServer: () => createBridgeMcpServer(fakeState()), log: createLogger('t', silentSink()) });
     servers.push(server);
     const p = server.start();
-    server.stop();
-    await expect(p).rejects.toThrow();
+    server.dispose();
+    await expect(p).rejects.toBeInstanceOf(BridgeStartAbortedError);
     expect(server.isRunning()).toBe(false);
+    expect(server.port).toBeNull();
   });
 
   it('the token is random per instance and redacted from logs until disposed', () => {

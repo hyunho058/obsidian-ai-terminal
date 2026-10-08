@@ -19,3 +19,12 @@ export const PROFILE_LABELS: Readonly<Record<ProfileId, string>> = {
 export function isAiProfile(profile: ProfileId): profile is 'claude' | 'agy' {
   return profile !== 'shell';
 }
+
+/** Name of the bridge's MCP server as the AI tools show it (`mcp__obsidian__get_active_note` in Claude Code). */
+export const MCP_SERVER_NAME = 'obsidian';
+
+/** Environment variable with the bridge's bearer token for AI panels (Claude, agy's shim, the snapshot hook). */
+export const BRIDGE_TOKEN_ENV = 'OBSIDIAN_BRIDGE_TOKEN';
+
+/** Environment variable with the bridge's base URL, `http://127.0.0.1:<port>` — append `/mcp` or a route like `/snapshot`. */
+export const BRIDGE_URL_ENV = 'OBSIDIAN_BRIDGE_URL';

@@ -149,6 +149,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_body(400, {"jsonrpc": "2.0", "id": msg["id"], "error": {"code": -32602, "message": "Invalid params"}})
         elif method == "fail/empty":
             self.send_body(202, b"")
+        elif method == "fail/refused":
+            # How the plugin refuses /mcp with the bridge tools off (JSON-RPC error body, id null).
+            self.send_body(403, {"jsonrpc": "2.0", "id": None, "error": {
+                "code": -32000, "message": "Obsidian bridge tools are turned off in the AI Terminal settings."}})
+        elif method == "fail/plain":
+            self.send_body(404, {"error": "not_found", "message": "No route\nfor POST /x"})
         else:
             self.send_body(200, {"jsonrpc": "2.0", "id": msg["id"], "error": {"code": -32601, "message": "Method not found"}})
 
@@ -292,6 +298,16 @@ class ForwardingTests(unittest.TestCase):
         empty = self.shim.request({"jsonrpc": "2.0", "id": 3, "method": "fail/empty"})
         self.assertEqual(empty["id"], 3)
         self.assertIn("no answer", empty["error"]["message"])
+        self.finish()
+
+    def test_refusal_message_reaches_agy(self):
+        refused = self.shim.request({"jsonrpc": "2.0", "id": 1, "method": "fail/refused"})
+        self.assertEqual(refused["id"], 1)
+        self.assertEqual(refused["error"]["code"], -32000)
+        self.assertEqual(refused["error"]["message"],
+                         "Obsidian bridge error (HTTP 403): Obsidian bridge tools are turned off in the AI Terminal settings.")
+        plain = self.shim.request({"jsonrpc": "2.0", "id": 2, "method": "fail/plain"})
+        self.assertEqual(plain["error"]["message"], "Obsidian bridge error (HTTP 404): No route for POST /x")
         self.finish()
 
     def test_wrong_token_is_401_error_without_token(self):

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   AGY_LOCK_FILE,
   AgyConfig,
+  describeRun,
   FileLock,
   isShimEntry,
   parseMcpList,
@@ -12,6 +13,7 @@ import {
   type AgyConfigOptions,
 } from '../../src/bridge/agyConfig';
 import { supportDir } from '../../src/support/installScripts';
+import { registerSecret } from '../../src/util/log';
 import { DUMMY_SECRET, createFakeAgy, secretConfig, type FakeAgy } from './fakeAgy';
 
 const PY = '/opt/homebrew/bin/python3';
@@ -161,6 +163,21 @@ describe('AgyConfig.ensureEntry (fake agy, temp HOME)', () => {
     fake.control({ listOutput: '[{"name":"x"}]\n' });
     expect(await config.ensureEntry(PY, SHIM)).toEqual({ status: 'failed', reason: 'unrecognised `agy mcp list` output' });
     expect(fake.mcpCalls('add')).toEqual([]);
+  });
+
+  it('a failed `agy mcp list` / `add` is described by its first stderr line only, redacted — never by its stdout', async () => {
+    const { fake, config } = setup();
+    fake.control({ fail: ['list'], failStdout: `context7  stdio  enabled  npx --key ${DUMMY_SECRET}\n`, failStderr: '' });
+    expect(await config.ensureEntry(PY, SHIM)).toEqual({ status: 'failed', reason: 'agy mcp list: exit 1' });
+
+    const unregister = registerSecret('tok-0123456789-secret');
+    try {
+      fake.control({ fail: ['add'], failStdout: `{"mcpServers": {"x": {"env": {"K": "${DUMMY_SECRET}"}}}}\n`, failStderr: 'Error: cannot write tok-0123456789-secret\nsecond line\n' });
+      expect(await config.ensureEntry(PY, SHIM)).toEqual({ status: 'failed', reason: 'agy mcp add: exit 1: Error: cannot write [REDACTED]' });
+    } finally {
+      unregister();
+    }
+    expect(describeRun({ code: 2, signal: null, stdout: `x ${DUMMY_SECRET}`, stderr: '  \n', timedOut: false })).toBe('exit 2');
   });
 
   it('skips without failing when agy is not installed', async () => {

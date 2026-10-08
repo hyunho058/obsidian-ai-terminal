@@ -23,6 +23,19 @@ describe('README', () => {
     expect(safety).toMatch(/moving or renaming the vault folder starts a new, empty history/i);
   });
 
+  it('Safety explains that the bridge keeps its port until the plugin stops (deviation 20)', () => {
+    const safety = section('Safety');
+    expect(safety).toMatch(/keeps its port until the plugin stops/i);
+    expect(safety).toMatch(/answers every request\s+with "turned off"/);
+    expect(safety).toMatch(/no other program can take that port/i);
+  });
+
+  it('Troubleshooting says how to reload the plugin (Notices say "Reload the plugin")', () => {
+    const troubleshooting = section('Troubleshooting');
+    expect(troubleshooting).toMatch(/\*\*How to reload the plugin\*\*/);
+    expect(troubleshooting).toMatch(/Settings › Community plugins, turn\s+\*\*AI Terminal\*\* off, then turn it on again/);
+  });
+
   it('every First run checklist step says what to expect', () => {
     const checklist = section('First run checklist');
     const steps = checklist.split(/^\d+\. /m).slice(1);

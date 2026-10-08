@@ -1,12 +1,22 @@
 import type { FeatureModule, PluginContext } from '../core';
 import { notice, type Logger } from '../util/log';
 import { createClaudeMcpContributor } from './claudeMcpContributor';
-import { BridgeHttpServer } from './httpServer';
+import { BridgeHttpServer, BridgeStartAbortedError } from './httpServer';
 import { BridgeState } from './state';
 import { createBridgeMcpServer } from './tools';
 
 export { BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV, MCP_SERVER_NAME, claudeMcpConfig, createClaudeMcpContributor } from './claudeMcpContributor';
-export { BRIDGE_HOST, MCP_PATH, BridgeHttpServer, type BridgeEndpoint, type BridgeServerService } from './httpServer';
+export {
+  BRIDGE_HOST,
+  MCP_PATH,
+  NOT_IN_USE_MESSAGE,
+  REFUSED_STATUS,
+  TOOLS_OFF_MESSAGE,
+  BridgeHttpServer,
+  BridgeStartAbortedError,
+  type BridgeEndpoint,
+  type BridgeServerService,
+} from './httpServer';
 export { BridgeError, toVaultPath } from './paths';
 export {
   BridgeState,
@@ -28,28 +38,30 @@ export interface BridgeModuleOptions {
 /**
  * T6 — bridge state reader (D24), the five MCP tools and the HTTP MCP server (D11, D27b) serving `ctx.routes`;
  * Claude panels get it through `--mcp-config` (D28). Services: `bridgeState`, `bridgeServer`.
- * The server listens while the bridge tools are on or another module needs it (`keepRunningWhile`, e.g. snapshots'
- * `/snapshot`); with the tools off it serves only `ctx.routes` and no spawn gets `--mcp-config` (deviation 19).
+ * The server is in use while the bridge tools are on or another module needs it (`keepRunningWhile`, e.g. snapshots'
+ * `/snapshot`); with the tools off it serves only `ctx.routes` and no spawn gets `--mcp-config` (deviation 19). It binds
+ * the first time it is in use and keeps that port until unload, refusing requests while not in use (deviation 20).
  */
 export function createBridgeModule(options: BridgeModuleOptions = {}): FeatureModule {
   let state: BridgeState | null = null;
   let server: BridgeHttpServer | null = null;
-  let startFailed = false;
-  /** Set in `register`: the first start / stop decision, made in the ready gate. */
+  let failureNotified = false;
+  /** Set in `register`: the first decision, made in the ready gate. */
   let startWhenReady: (() => Promise<void>) | null = null;
 
-  const startServer = async (ctx: PluginContext, log: Logger): Promise<void> => {
-    if (!server) return;
+  const startServer = async (ctx: PluginContext, log: Logger, srv: BridgeHttpServer): Promise<void> => {
     try {
-      await server.start();
-      startFailed = false;
+      await srv.start();
+      failureNotified = false;
     } catch (err) {
+      // Closed while starting = plugin unload: nothing was lost that the user needs to hear about.
+      if (err instanceof BridgeStartAbortedError || ctx.unloading) return;
       log.error('bridge server could not start', err);
-      if (!startFailed && !ctx.unloading) {
-        const lost = ctx.settings.bridgeEnabled ? 'AI tools cannot see your notes' : 'Claude Code messages are not snapshotted';
-        notice(`AI Terminal: the bridge server could not start, so ${lost}. Reload the plugin to try again.`);
+      const lost = lostWithoutServer(ctx, srv);
+      if (!failureNotified && lost.length > 0) {
+        notice(bridgeStartFailedNotice(lost));
+        failureNotified = true;
       }
-      startFailed = true;
     }
   };
 
@@ -61,15 +73,27 @@ export function createBridgeModule(options: BridgeModuleOptions = {}): FeatureMo
       const bridgeState = new BridgeState({ app: ctx.app, vaultPath: ctx.vaultPath, log, debounceMs: options.debounceMs });
       bridgeState.start();
       ctx.plugin.registerEditorExtension(bridgeState.editorExtension());
-      // Start / stop only when the answer changes; checked once ready, then after settings changes and demand changes.
-      let wanted: boolean | null = null;
+      // Deviation 20: the first time the server is in use it binds a port and keeps it until unload. Later "not in use"
+      // only makes it refuse requests (the server checks per request). Checked once ready, then after settings and
+      // demand changes; a failed start is retried the next time it becomes in use.
+      let inUse: boolean | null = null;
+      let starting = false;
       const sync = (): void => {
-        if (wanted === null || ctx.unloading || server !== httpServer) return;
-        const want = ctx.settings.bridgeEnabled || httpServer.neededFor().length > 0;
-        if (want === wanted) return;
-        wanted = want;
-        if (want) void startServer(ctx, log);
-        else httpServer.stop();
+        if (inUse === null || ctx.unloading || server !== httpServer) return;
+        const want = httpServer.isServing();
+        if (want === inUse) return;
+        inUse = want;
+        if (!want) {
+          if (httpServer.isRunning()) log.info('bridge not in use: refusing requests (the port is kept until unload)');
+          return;
+        }
+        if (httpServer.isRunning()) {
+          log.info('bridge in use again');
+          return;
+        }
+        if (starting) return;
+        starting = true;
+        void startServer(ctx, log, httpServer).finally(() => (starting = false));
       };
       const httpServer = new BridgeHttpServer({
         routes: ctx.routes,
@@ -86,7 +110,7 @@ export function createBridgeModule(options: BridgeModuleOptions = {}): FeatureMo
       ctx.spawn.add('bridge:claude-mcp-config', createClaudeMcpContributor(() => (ctx.settings.bridgeEnabled ? httpServer : undefined)));
       ctx.onSettingsChange(sync);
       startWhenReady = async () => {
-        wanted = false;
+        inUse = false;
         sync();
         await httpServer.whenListening().catch(() => {});
       };
@@ -102,4 +126,17 @@ export function createBridgeModule(options: BridgeModuleOptions = {}): FeatureMo
       startWhenReady = null;
     },
   };
+}
+
+/** What stops working while the server cannot start, in plain words (bridge tools, then each `keepRunningWhile` need). */
+function lostWithoutServer(ctx: PluginContext, srv: BridgeHttpServer): string[] {
+  const lost = ctx.settings.bridgeEnabled ? ['AI tools cannot see your notes'] : [];
+  for (const reason of srv.neededFor()) lost.push(reason === 'snapshots' ? 'Claude Code messages are not snapshotted' : `${reason} cannot use it`);
+  return lost;
+}
+
+/** The one Notice for a bridge server that could not start; names everything that is lost. */
+export function bridgeStartFailedNotice(lost: readonly string[]): string {
+  const what = lost.length <= 1 ? (lost[0] ?? 'AI tools cannot see your notes') : `${lost.slice(0, -1).join(', ')} and ${lost[lost.length - 1]}`;
+  return `AI Terminal: the bridge server could not start, so ${what}. Reload the plugin to try again.`;
 }

@@ -7,7 +7,7 @@ import { createAgyModule, FOREIGN_ENTRY_NOTICE, type AgyModuleOptions } from '..
 import { AGY_LOCK_FILE, shimCommand } from '../../src/bridge/agyConfig';
 import { createAgyEnvContributor } from '../../src/bridge/agyEnvContributor';
 import type { BridgeEndpoint } from '../../src/bridge/httpServer';
-import { BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV, createBridgeModule } from '../../src/bridge/index';
+import { BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV, TOOLS_OFF_MESSAGE, createBridgeModule } from '../../src/bridge/index';
 import type { SpawnContext } from '../../src/core/spawn';
 import type { FeatureModule } from '../../src/core/types';
 import { supportDir } from '../../src/support/installScripts';
@@ -340,6 +340,25 @@ describe('shim ↔ real bridge (R11.6, R11.7)', () => {
     const text = (lines[3]!.result as { content: Array<{ text: string }> }).content[0]!.text;
     expect(JSON.parse(text)).toMatchObject({ path: 'Notes/X.md', content: 'hello from X' });
     expect(JSON.stringify(lines)).not.toContain(token);
+  });
+
+  it('deviation 20: an agy started before the tools were turned off gets the plain "turned off" message, and works again once they are back on', async () => {
+    const s = await load(newFake(), {}, { bridge: true });
+    const server = s.ctx.services.require('bridgeServer');
+    const plan = await s.ctx.spawn.resolve(spawnCtx('agy'));
+    const list = (id: number) => [{ jsonrpc: '2.0', id, method: 'tools/list', params: {} }];
+    s.ctx.settings.bridgeEnabled = false;
+    await s.ctx.saveSettings();
+    expect(server.isRunning()).toBe(true);
+    const off = await runShim(plan.env, list(1), 1);
+    expect(off.stderr).toBe('');
+    expect(off.lines).toEqual([{ jsonrpc: '2.0', id: 1, error: { code: -32000, message: `Obsidian bridge error (HTTP 403): ${TOOLS_OFF_MESSAGE}` } }]);
+    s.ctx.settings.bridgeEnabled = true;
+    await s.ctx.saveSettings();
+    expect(plan.env[BRIDGE_URL_ENV]).toBe(server.baseUrl);
+    const on = await runShim(plan.env, list(2), 1);
+    expect((on.lines[0]!.result as { tools: unknown[] }).tools).toHaveLength(5);
+    expect(JSON.stringify([off.lines, on.lines])).not.toContain(server.token);
   });
 
   it('R11.7: without the variables (agy outside Obsidian) the shim lists no tools and shows no error', async () => {
