@@ -74,9 +74,9 @@ Each item must score **≥ 7/10**.
 18. **On program exit** the panel leaves the alternate screen and resets input modes so the exit prompt is visible.
 19. **Bridge tools off ≠ snapshots off** (iteration-1 decision): when `bridgeEnabled` is off but snapshots are on, the local server keeps running (127.0.0.1 + token) serving only `/snapshot`; `/mcp` and the MCP contributors are off. Also hardening: the agy relay is registered as `python -I <shim>`, and a foreign agy entry's command/URL is never shown in Notices or logs.
 
-20. **The local server keeps its port for the whole plugin session** (iteration-2 security decision): once started it is never closed until the plugin unloads; when neither Bridge tools nor snapshots need it, it refuses every request (after the token check) instead of freeing the port — so no other program can take over a port that running panels still send their token to.
+20. **The local server keeps its port for the whole plugin session** (iteration-2 security decision — approved by the user 2026-10-08, answer "Keep the port"): once started it is never closed until the plugin unloads; when neither Bridge tools nor snapshots need it, it refuses every request (after the token check) instead of freeing the port — so no other program can take over a port that running panels still send their token to.
 
-21. **The IDE WebSocket server also keeps its port for the whole plugin session** (iteration-3 security decision): once started it is closed only at plugin unload; turning the IDE connection off removes the lock file, closes connected clients and refuses new connections (same port and token kept), and turning it back on rewrites the lock file for the same port.
+21. **The IDE WebSocket server also keeps its port for the whole plugin session** (iteration-3 security decision — approved by the user 2026-10-09, answer "Same fix"): once started it is closed only at plugin unload; turning the IDE connection off removes the lock file, closes connected clients and refuses new connections (same port and token kept), and turning it back on rewrites the lock file for the same port.
 
 ## Autonomy Boundary
 
