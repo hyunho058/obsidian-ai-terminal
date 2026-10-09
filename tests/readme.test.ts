@@ -30,6 +30,14 @@ describe('README', () => {
     expect(safety).toMatch(/no other program can take that port/i);
   });
 
+  it('Safety explains that the Claude Code IDE connection keeps its port too (deviation 21)', () => {
+    const safety = section('Safety');
+    expect(safety).toMatch(/\*\*Claude Code IDE connection\*\* keeps its port in the same way/);
+    expect(safety).toMatch(/removes its lock file, disconnects Claude and refuses new connections, but it keeps the same port/);
+    expect(safety).toMatch(/the lock file comes back with the same port/);
+    expect(safety).toMatch(/removes it when you turn the connection off or the\s+plugin stops/);
+  });
+
   it('Troubleshooting says how to reload the plugin (Notices say "Reload the plugin")', () => {
     const troubleshooting = section('Troubleshooting');
     expect(troubleshooting).toMatch(/\*\*How to reload the plugin\*\*/);

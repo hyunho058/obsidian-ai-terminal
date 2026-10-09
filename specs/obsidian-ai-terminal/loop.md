@@ -76,6 +76,8 @@ Each item must score **≥ 7/10**.
 
 20. **The local server keeps its port for the whole plugin session** (iteration-2 security decision): once started it is never closed until the plugin unloads; when neither Bridge tools nor snapshots need it, it refuses every request (after the token check) instead of freeing the port — so no other program can take over a port that running panels still send their token to.
 
+21. **The IDE WebSocket server also keeps its port for the whole plugin session** (iteration-3 security decision): once started it is closed only at plugin unload; turning the IDE connection off removes the lock file, closes connected clients and refuses new connections (same port and token kept), and turning it back on rewrites the lock file for the same port.
+
 ## Autonomy Boundary
 
 **✅ Auto-fix (stay in the loop):** type/format errors; missing in-scope tests; bugs where code fails a sub-requirement's Given/When/Then without changing a Decision; docs/README/comments; local renames; behaviour-preserving refactors that keep Gate 1 green.

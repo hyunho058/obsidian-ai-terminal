@@ -1,9 +1,10 @@
 import * as http from 'node:http';
+import * as net from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { IdeServer, selectionChangedParams } from '../../src/bridge/ideServer';
+import { IDE_OFF_MESSAGE, IdeServer, IdeStartAbortedError, selectionChangedParams } from '../../src/bridge/ideServer';
 import { createLogger, redact } from '../../src/util/log';
 import { silentSink } from '../bridge/helpers';
-import { FakeSelectionSource, connect, sleep, snapshot, type IdeTestClient } from './helpers';
+import { FakeSelectionSource, connect, sleep, snapshot, tcpConnects, type IdeTestClient } from './helpers';
 
 const TOKEN = 'ide-token-0123456789';
 const servers: IdeServer[] = [];
@@ -179,37 +180,99 @@ describe('IDE WebSocket server — selection_changed (R10.4, R10.5)', () => {
   });
 });
 
-describe('IDE WebSocket server — lifecycle', () => {
-  it('stop() is synchronous: port closed, clients dropped, unsubscribed; start() again reuses the port', async () => {
+describe('IDE WebSocket server — lifecycle (deviation 21)', () => {
+  it('setAccepting(false) is synchronous: clients dropped, unsubscribed, port still bound, token → 403, no token → 401', async () => {
     const { server, state } = await startServer();
     const port = server.port!;
     const c = await client(server);
     await c.handshake();
     expect(state!.listenerCount()).toBe(1);
     const closed = new Promise<void>((r) => c.ws.once('close', () => r()));
-    server.stop();
+    server.setAccepting(false);
+    expect(server.isAccepting()).toBe(false);
+    expect(server.isRunning()).toBe(true);
+    expect(server.port).toBe(port);
+    expect(server.clientCount()).toBe(0);
+    expect(state!.listenerCount()).toBe(0);
+    await closed;
+    expect(await tcpConnects(port)).toBe(true);
+    expect(await connect(port, TOKEN)).toMatchObject({ ok: false, status: 403 });
+    expect(await connect(port, null)).toMatchObject({ ok: false, status: 401 });
+    expect(await connect(port, 'wrong-token-0123456789')).toMatchObject({ ok: false, status: 401 });
+    await expect(server.whenListening()).resolves.toBeUndefined();
+
+    server.setAccepting(true);
+    expect(server.port).toBe(port);
+    expect(state!.listenerCount()).toBe(1);
+    const again = await client(server);
+    await again.handshake();
+    state!.emit(snapshot());
+    expect((await again.next((m) => m.method === 'selection_changed')).params).toEqual(selectionChangedParams(snapshot()));
+  });
+
+  it('the 403 body says the connection is off and never contains the token', async () => {
+    const { server, sink } = await startServer();
+    server.setAccepting(false);
+    const res = await rawUpgrade(server.port!, TOKEN);
+    expect(res).toMatch(/^HTTP\/1\.1 403 Forbidden\r\n/);
+    expect(res).toContain(IDE_OFF_MESSAGE);
+    expect(res).not.toContain(TOKEN);
+    expect(sink.lines.join('\n')).not.toContain(TOKEN);
+  });
+
+  it('start() is a no-op once bound; a server that starts while not accepting refuses until setAccepting(true)', async () => {
+    const server = new IdeServer({ log: createLogger('ide', silentSink()), state: null, token: TOKEN });
+    servers.push(server);
+    server.setAccepting(false);
+    await server.start();
+    const port = server.port!;
+    expect(await connect(port, TOKEN)).toMatchObject({ ok: false, status: 403 });
+    await server.start();
+    expect(server.port).toBe(port);
+    server.setAccepting(true);
+    const r = await connect(port, TOKEN);
+    expect(r.ok).toBe(true);
+    if (r.ok) clients.push(r.client);
+  });
+
+  it('dispose() closes the port and drops clients synchronously; it cannot start again', async () => {
+    const { server, state } = await startServer();
+    const port = server.port!;
+    const c = await client(server);
+    const closed = new Promise<void>((r) => c.ws.once('close', () => r()));
+    server.dispose();
     expect(server.isRunning()).toBe(false);
     expect(server.port).toBeNull();
     expect(state!.listenerCount()).toBe(0);
     await closed;
-    expect(await connect(port, TOKEN)).toMatchObject({ ok: false });
-    await expect(server.whenListening()).rejects.toThrow(/not running/);
-
-    await server.start();
-    expect(server.port).toBe(port);
-    expect(state!.listenerCount()).toBe(1);
-    const again = await connect(server.port!, TOKEN);
-    expect(again.ok).toBe(true);
-    if (again.ok) clients.push(again.client);
+    expect(await tcpConnects(port)).toBe(false);
+    await expect(server.whenListening()).rejects.toThrow(/not listening/);
+    await expect(server.start()).rejects.toBeInstanceOf(IdeStartAbortedError);
   });
 
-  it('stop() while starting rejects the start', async () => {
+  it('dispose() while starting rejects the start', async () => {
     const server = new IdeServer({ log: createLogger('ide', silentSink()), state: null, token: TOKEN });
     servers.push(server);
     const starting = server.start();
     expect(server.whenListening()).toBe(starting);
-    server.stop();
-    await expect(starting).rejects.toThrow(/stopped/);
+    server.dispose();
+    await expect(starting).rejects.toBeInstanceOf(IdeStartAbortedError);
     expect(server.isRunning()).toBe(false);
   });
 });
+
+/** A raw WebSocket upgrade request; resolves with the whole answer. */
+function rawUpgrade(port: number, token: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect({ host: '127.0.0.1', port }, () => {
+      socket.write(
+        `GET / HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\n` +
+          `Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Protocol: mcp\r\nX-Claude-Code-Ide-Authorization: ${token}\r\n\r\n`,
+      );
+    });
+    let text = '';
+    socket.on('data', (d) => (text += d.toString()));
+    socket.once('close', () => resolve(text));
+    socket.once('error', reject);
+  });
+}

@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BRIDGE_TOKEN_ENV, createBridgeModule } from '../../src/bridge/index';
@@ -10,7 +10,7 @@ import type { FeatureModule } from '../../src/core/types';
 import type { BridgeState } from '../../src/bridge/state';
 import type { SpawnContext } from '../../src/core/spawn';
 import { createBridgeEnv, startRuntime } from '../bridge/helpers';
-import { connect, sleep, type IdeTestClient } from './helpers';
+import { connect, sleep, tcpConnects, type IdeTestClient } from './helpers';
 
 type Runtime = Awaited<ReturnType<typeof startRuntime>>;
 const runtimes: Runtime[] = [];
@@ -119,6 +119,8 @@ describe('ide module', () => {
     runtime.unload();
     expect(existsSync(file)).toBe(false);
     expect(lockFiles()).toEqual([]);
+    expect(ide.isBound()).toBe(false);
+    expect(await tcpConnects(port)).toBe(false);
     expect(await connect(port, 'whatever-token-123')).toMatchObject({ ok: false });
   });
 
@@ -134,6 +136,7 @@ describe('ide module', () => {
   it('R10.10: with ideConnectionEnabled = false there is no server or lock file, no --ide / SSE port, and the HTTP tools still work', async () => {
     const { ctx, env, ide } = await load({ ideConnectionEnabled: false });
     expect(ide.isRunning()).toBe(false);
+    expect(ide.isBound()).toBe(false); // off from the start: nothing is bound (deviation 21 binds lazily)
     expect(ide.port).toBeNull();
     expect(lockFiles()).toEqual([]);
     const plan = await ctx.spawn.resolve(spawnCtx('claude'));
@@ -162,35 +165,107 @@ describe('ide module', () => {
     }
     // Still no IDE server or lock file after the tool calls.
     expect(ide.isRunning()).toBe(false);
+    expect(ide.isBound()).toBe(false);
     expect(lockFiles()).toEqual([]);
   });
 
-  it('settings toggle: off → server closed, lock removed, contributor silent, bridge untouched; on → back with a new lock file', async () => {
+  it('deviation 21 — toggle off: client closed, lock file gone, port still bound (token → 403, no token → 401), no --ide, bridge untouched', async () => {
     const { ctx, ide } = await load();
+    const port = ide.port!;
     const firstLock = ide.lockFilePath!;
     const { authToken } = JSON.parse(readFileSync(firstLock, 'utf8'));
-    const c = await claudeClient(ide.port!, authToken);
+    const c = await claudeClient(port, authToken);
+    await sleep(10);
+    expect(ide.clientCount()).toBe(1);
     const closed = new Promise<void>((r) => c.ws.once('close', () => r()));
 
     ctx.settings.ideConnectionEnabled = false;
     await ctx.saveSettings();
-    expect(ide.isRunning()).toBe(false);
-    expect(existsSync(firstLock)).toBe(false);
+    expect(existsSync(firstLock)).toBe(false); // removed synchronously
+    expect(lockFiles()).toEqual([]);
     await closed;
-    let plan = await ctx.spawn.resolve(spawnCtx('claude'));
+    expect(ide.clientCount()).toBe(0);
+    expect(ide.isRunning()).toBe(false);
+    expect(ide.isBound()).toBe(true);
+    expect(ide.port).toBe(port);
+    expect(await tcpConnects(port)).toBe(true);
+    expect(await connect(port, authToken)).toMatchObject({ ok: false, status: 403 });
+    expect(await connect(port, null)).toMatchObject({ ok: false, status: 401 });
+    expect(await connect(port, 'x'.repeat(36))).toMatchObject({ ok: false, status: 401 });
+    await expect(ide.whenListening()).rejects.toThrow(/not running/);
+    const plan = await ctx.spawn.resolve(spawnCtx('claude'));
     expect(plan.args).not.toContain('--ide');
     expect(plan.env.CLAUDE_CODE_SSE_PORT).toBeUndefined();
     expect(ctx.services.require('bridgeServer').isRunning()).toBe(true);
+  });
 
+  it('deviation 21 — toggle on again: lock file back with the same port and token; a panel started before the toggle reconnects and gets selection_changed', async () => {
+    const { ctx, env, ide } = await load();
+    const state = ctx.services.require('bridgeState') as BridgeState;
+    const before = await ctx.spawn.resolve(spawnCtx('claude')); // a Claude panel started while the connection was on
+    const oldPort = Number(before.env.CLAUDE_CODE_SSE_PORT);
+    const oldLock = JSON.parse(readFileSync(ide.lockFilePath!, 'utf8'));
+    expect(oldPort).toBe(ide.port);
+
+    ctx.settings.ideConnectionEnabled = false;
+    await ctx.saveSettings();
+    expect(lockFiles()).toEqual([]);
     ctx.settings.ideConnectionEnabled = true;
     await ctx.saveSettings();
     await ide.whenListening();
     expect(ide.isRunning()).toBe(true);
-    expect(lockFiles()).toEqual([`${ide.port}.lock`]);
-    plan = await ctx.spawn.resolve(spawnCtx('claude'));
-    expect(plan.args).toContain('--ide');
-    expect(plan.env.CLAUDE_CODE_SSE_PORT).toBe(String(ide.port));
-    const again = await connect(ide.port!, authToken); // same token for the whole plugin load
+    expect(ide.port).toBe(oldPort);
+    expect(lockFiles()).toEqual([`${oldPort}.lock`]);
+    expect(ide.lockFilePath).toBe(join(ideLockDir(), `${oldPort}.lock`));
+    expect(statSync(ide.lockFilePath!).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(readFileSync(ide.lockFilePath!, 'utf8'))).toEqual(oldLock);
+
+    const c = await claudeClient(oldPort, oldLock.authToken);
+    await sleep(20);
+    const x = env.addNote('Notes/X.md', 'one\ntwo\nthree\nfour');
+    env.focus(x.leaf);
+    x.editor.setSelection({ line: 0, ch: 0 }, { line: 2, ch: 0 });
+    state.editorActivity();
+    const msg = await c.next((m) => m.method === 'selection_changed' && m.params.selection.isEmpty === false);
+    expect(msg.params).toMatchObject({ text: 'one\ntwo\n', filePath: '/vault/Notes/X.md' });
+
+    const after = await ctx.spawn.resolve(spawnCtx('claude'));
+    expect(after.args).toContain('--ide');
+    expect(after.env.CLAUDE_CODE_SSE_PORT).toBe(String(oldPort));
+  });
+
+  it('deviation 21 — unload after a toggle off closes the port and leaves no lock file', async () => {
+    const { ctx, runtime, ide } = await load();
+    const port = ide.port!;
+    ctx.settings.ideConnectionEnabled = false;
+    await ctx.saveSettings();
+    expect(await tcpConnects(port)).toBe(true);
+    runtime.unload();
+    expect(ide.isBound()).toBe(false);
+    expect(lockFiles()).toEqual([]);
+    expect(await tcpConnects(port)).toBe(false);
+  });
+
+  it('deviation 21 — a failed lock-file write keeps the port and refuses; turning the connection on again retries on the same port', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'ide-blocked-'));
+    const lockDir = join(base, 'ide');
+    writeFileSync(lockDir, 'a file where the lock folder should be');
+    const { ctx, ide } = await load(null, { lockDir, windowTarget: null });
+    expect(ide.isRunning()).toBe(false);
+    expect(ide.isBound()).toBe(true);
+    const port = ide.port!;
+    expect(await connect(port, null)).toMatchObject({ ok: false, status: 401 });
+
+    rmSync(lockDir);
+    ctx.settings.ideConnectionEnabled = false;
+    await ctx.saveSettings();
+    ctx.settings.ideConnectionEnabled = true;
+    await ctx.saveSettings();
+    await ide.whenListening();
+    expect(ide.port).toBe(port);
+    expect(ide.lockFilePath).toBe(join(lockDir, `${port}.lock`));
+    const { authToken } = JSON.parse(readFileSync(ide.lockFilePath!, 'utf8'));
+    const again = await connect(port, authToken);
     expect(again.ok).toBe(true);
     if (again.ok) clients.push(again.client);
   });
@@ -217,7 +292,7 @@ describe('ide module', () => {
     }
   });
 
-  it('toggling off while starting leaves nothing behind', async () => {
+  it('toggling off while starting leaves no lock file; the port bound by that first "on" stays and refuses (deviation 21)', async () => {
     const { ctx, ide } = await load({ ideConnectionEnabled: false });
     ctx.settings.ideConnectionEnabled = true;
     await ctx.saveSettings();
@@ -226,6 +301,8 @@ describe('ide module', () => {
     await sleep(50);
     expect(ide.isRunning()).toBe(false);
     expect(lockFiles()).toEqual([]);
+    expect(ide.isBound()).toBe(true);
+    expect(await connect(ide.port!, null)).toMatchObject({ ok: false, status: 401 });
   });
 
   it('R10.7: on load, stale Obsidian lock files are deleted; live ones, other IDEs and garbage stay unchanged', async () => {

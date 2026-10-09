@@ -271,10 +271,16 @@ move to Obsidian's trash (`.trash/`).
   When you turn a switch on again, panels that used it before work again without a restart. The port closes when
   you turn the plugin off or quit Obsidian. If both switches are off when the plugin starts, the server starts only
   when you turn one of them on.
+  The **Claude Code IDE connection** keeps its port in the same way. When you turn "Claude Code IDE connection" off,
+  the plugin removes its lock file, disconnects Claude and refuses new connections, but it keeps the same port.
+  When you turn it on again, the lock file comes back with the same port, and Claude panels that were already open
+  can connect again (run `/ide` in Claude if it does not reconnect). If the switch is off when the plugin starts,
+  this port is not opened at all.
 - **Your AI settings stay yours.** The plugin never changes the settings files of Claude Code or Antigravity.
   Claude gets the bridge only for each session it starts. The one exception is the `obsidian` entry in agy
   (see [Antigravity](#antigravity)). The plugin also writes a small lock file `~/.claude/ide/<port>.lock`
-  (readable only by you) while it runs, and removes it when it stops.
+  (readable only by you) while the IDE connection is on, and removes it when you turn the connection off or the
+  plugin stops.
 - **After you uninstall**, run `agy mcp remove obsidian` in Terminal. Obsidian cannot tell the plugin that it was
   deleted, so the plugin cannot remove this entry itself. You can also delete `~/.config/obsidian-ai-terminal`
   and, if you do not need the history any more, `~/.local/share/obsidian-ai-terminal`.

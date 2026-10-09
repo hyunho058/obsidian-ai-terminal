@@ -3,23 +3,30 @@ import { notice, type Logger } from '../util/log';
 import { spawnEnv } from '../util/spawnEnv';
 import { createClaudeIdeContributor, type IdeEndpoint } from './claudeIdeContributor';
 import { claudeGlobalConfigFile, createDiffToolHint } from './ideDiffHint';
-import { IdeServer, type SelectionSource } from './ideServer';
+import { IdeServer, IdeStartAbortedError, type SelectionSource } from './ideServer';
 import { IDE_NAME, cleanStaleLockFiles, ideLockDir, isPidAlive, removeLockFile, workspaceFoldersFor, writeLockFile } from './lockFile';
 
 export { IDE_FLAG, SSE_PORT_ENV, createClaudeIdeContributor, type IdeEndpoint } from './claudeIdeContributor';
 export { DIFF_TOOL_HINT, claudeGlobalConfigFile, createDiffToolHint, readClaudeDiffTool } from './ideDiffHint';
-export { IDE_AUTH_HEADER, IDE_SERVER_NAME, IdeServer, selectionChangedParams, type SelectionChangedParams } from './ideServer';
+export { IDE_AUTH_HEADER, IDE_OFF_MESSAGE, IDE_SERVER_NAME, IdeServer, IdeStartAbortedError, selectionChangedParams, type SelectionChangedParams } from './ideServer';
 export { IDE_NAME, cleanStaleLockFiles, ideLockDir, isPidAlive, removeLockFile, writeLockFile, type IdeLockContent } from './lockFile';
 
-/** The `ide` service: the Claude Code IDE connection of this vault (D27a). */
+/**
+ * The `ide` service: the Claude Code IDE connection of this vault (D27a). Deviation 21: the WebSocket port is bound the
+ * first time the connection is turned on in this plugin session and stays bound until unload; turning it off removes
+ * the lock file, closes connected clients and refuses new ones, and turning it on again rewrites the lock file for the
+ * same port and token.
+ */
 export interface IdeService extends IdeEndpoint {
-  /** WebSocket port while the connection is up (server listening and lock file written), else null. */
+  /** The bound WebSocket port — fixed for the whole plugin session once bound; null until the connection is first on. */
   readonly port: number | null;
-  /** `~/.claude/ide/<port>.lock` while the connection is up, else null. */
+  /** `~/.claude/ide/<port>.lock` while the connection is on, else null. */
   readonly lockFilePath: string | null;
-  /** True while the server listens and the lock file exists. */
+  /** True while the connection is on: port bound, lock file written, connections accepted. */
   isRunning(): boolean;
-  /** Resolves once the connection is up; rejects if it is turned off, stopped or fails to start. */
+  /** The port is bound (it stays bound until the plugin unloads, also while the connection is off). */
+  isBound(): boolean;
+  /** Resolves once the connection is on; rejects if it is turned off, unloaded or fails to start. */
   whenListening(): Promise<void>;
   /** Connected Claude Code sessions (handshake completed). */
   clientCount(): number;
@@ -48,7 +55,8 @@ export interface IdeModuleOptions {
 
 /**
  * A window reload (Cmd+R) or quit may skip plugin unload; the renderer keeps its pid across a reload, so a lock file
- * left behind would look alive. These events remove it synchronously first.
+ * left behind would look alive. These events remove it synchronously first (like turning the connection off; the port
+ * goes away with the page).
  */
 const PAGE_UNLOAD_EVENTS = ['pagehide', 'unload'] as const;
 
@@ -62,11 +70,16 @@ class CancelledError extends Error {
   }
 }
 
-/** Server + lock file, started and stopped together. `disable()` / `dispose()` are synchronous (R10.9). */
+/**
+ * Server + lock file. `enable()` binds the port (first time only), accepts connections and writes the lock file;
+ * `disable()` removes the lock file and refuses connections but keeps the port (deviation 21); `dispose()` also closes
+ * the port. `disable()` / `dispose()` are synchronous (R10.9).
+ */
 export class IdeConnection implements IdeService {
   private generation = 0;
   private lockPath: string | null = null;
   private pending: Promise<void> | null = null;
+  private disposed = false;
 
   constructor(
     private readonly server: IdeServer,
@@ -74,7 +87,7 @@ export class IdeConnection implements IdeService {
   ) {}
 
   get port(): number | null {
-    return this.lockPath ? this.server.port : null;
+    return this.server.port;
   }
 
   get lockFilePath(): string | null {
@@ -82,7 +95,11 @@ export class IdeConnection implements IdeService {
   }
 
   isRunning(): boolean {
-    return this.lockPath !== null && this.server.isRunning();
+    return this.lockPath !== null && this.server.isRunning() && this.server.isAccepting();
+  }
+
+  isBound(): boolean {
+    return this.server.isRunning();
   }
 
   clientCount(): number {
@@ -95,8 +112,9 @@ export class IdeConnection implements IdeService {
     return Promise.reject(new Error('The Claude Code IDE connection is not running (turned off in settings or stopped).'));
   }
 
-  /** Starts the server, then writes the lock file. Rejects with `CancelledError` if `disable()` came first. */
+  /** Binds the port if needed, accepts connections, then writes the lock file. Rejects with `CancelledError` if `disable()` came first. */
   enable(): Promise<void> {
+    if (this.disposed) return Promise.reject(new CancelledError());
     if (this.isRunning()) return Promise.resolve();
     if (this.pending) return this.pending;
     const gen = ++this.generation;
@@ -104,12 +122,13 @@ export class IdeConnection implements IdeService {
       try {
         await this.server.start();
       } catch (err) {
-        if (gen !== this.generation) throw new CancelledError();
+        if (gen !== this.generation || err instanceof IdeStartAbortedError) throw new CancelledError();
         throw err;
       }
       if (gen !== this.generation) throw new CancelledError();
       const port = this.server.port;
       if (port === null) throw new Error('IDE server has no port');
+      this.server.setAccepting(true);
       try {
         this.lockPath = writeLockFile(this.cfg.lockDir, port, {
           pid: this.cfg.pid,
@@ -119,8 +138,8 @@ export class IdeConnection implements IdeService {
           authToken: this.server.token,
         });
       } catch (err) {
-        // Without a lock file no Claude Code can find the server or its token.
-        this.server.stop();
+        // Without a lock file no Claude Code can find the server or its token; the port stays bound (deviation 21).
+        this.server.setAccepting(false);
         throw err;
       }
       this.cfg.log.debug(`IDE lock file written: ${this.lockPath}`);
@@ -135,7 +154,10 @@ export class IdeConnection implements IdeService {
     return promise;
   }
 
-  /** Removes the lock file and closes the server (R10.9, R10.10). */
+  /**
+   * Turning the connection off (R10.10, deviation 21): removes the lock file, closes connected clients and refuses new
+   * connections. The port and token stay, so panels started earlier can reconnect after `enable()`.
+   */
   disable(): void {
     this.generation++;
     this.pending = null;
@@ -143,10 +165,12 @@ export class IdeConnection implements IdeService {
       removeLockFile(this.lockPath, this.server.token);
       this.lockPath = null;
     }
-    this.server.stop();
+    this.server.setAccepting(false);
   }
 
+  /** Plugin unload: `disable()` and close the port (R10.9). */
   dispose(): void {
+    this.disposed = true;
     this.disable();
     this.server.dispose();
   }
@@ -155,7 +179,9 @@ export class IdeConnection implements IdeService {
 /**
  * T7 — Claude Code IDE connection (D27a, D29, D30): WebSocket MCP server + `~/.claude/ide/<port>.lock`, started in the
  * ready gate when `ideConnectionEnabled`; spawn contributor `ide:claude` adds `--ide` + `CLAUDE_CODE_SSE_PORT` to Claude
- * panels; stale Obsidian lock files are removed on load. Service: `ide`.
+ * panels while the connection is on; stale Obsidian lock files are removed on load. Service: `ide`.
+ * Deviation 21: the port is bound the first time the connection is on and kept until unload; turning it off only
+ * removes the lock file and refuses connections, so no other program can take a port that running panels still hold.
  */
 export function createIdeModule(options: IdeModuleOptions = {}): FeatureModule {
   let conn: IdeConnection | null = null;

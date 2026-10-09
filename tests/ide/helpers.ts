@@ -1,5 +1,6 @@
 // IDE connection test helpers: a WebSocket client that speaks the Claude Code side of the protocol, and a fake
 // selection source standing in for bridgeState.
+import * as net from 'node:net';
 import { WebSocket } from 'ws';
 import type { BridgeChange, EditorSelectionSnapshot } from '../../src/bridge/state';
 import type { SelectionSource } from '../../src/bridge/ideServer';
@@ -133,3 +134,12 @@ export class FakeSelectionSource implements SelectionSource {
 }
 
 export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** True if a plain TCP connection to 127.0.0.1:<port> succeeds (the port is still bound). */
+export function tcpConnects(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: '127.0.0.1', port });
+    socket.once('connect', () => (socket.destroy(), resolve(true)));
+    socket.once('error', () => resolve(false));
+  });
+}

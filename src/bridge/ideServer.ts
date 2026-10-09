@@ -22,6 +22,8 @@ export const IDE_SERVER_NAME = 'Obsidian';
  * current state is sent shortly after and once more later.
  */
 export const SEED_DELAYS_MS: readonly number[] = [250, 1500];
+/** Body of the 403 answer to an upgrade with the right token while the IDE connection is turned off. */
+export const IDE_OFF_MESSAGE = 'The Claude Code IDE connection is turned off in the AI Terminal settings.';
 const MAX_PAYLOAD_BYTES = 4 * 1024 * 1024;
 
 /** JSON-RPC error codes used here. */
@@ -83,11 +85,22 @@ interface IdeClient {
 
 type JsonRpcId = string | number;
 
+/** `start()` gave up because the server was disposed (plugin unload). */
+export class IdeStartAbortedError extends Error {
+  constructor() {
+    super('The Claude Code IDE connection was closed while starting.');
+    this.name = 'IdeStartAbortedError';
+  }
+}
+
 /**
  * Claude Code IDE connection server (D27a): WebSocket on `127.0.0.1:<random port>` speaking minimal MCP JSON-RPC —
  * `initialize`, `notifications/initialized`, `ping`, `tools/list` → no tools, every tool call refused (no `openDiff`,
  * `close_tab`, `closeAllDiffTabs`, `getDiagnostics`, save / dirty-check), anything else → method not found — and pushes
  * `selection_changed` from `bridgeState`. Upgrades without the token header get 401 (R10.2).
+ * Deviation 21: once bound, the port stays bound until `dispose()` (plugin unload). `setAccepting(false)` (the IDE
+ * connection turned off) drops every client and refuses new upgrades with 403 after the token check; the port and
+ * token stay the same, so panels started earlier can connect again once it accepts again.
  */
 export class IdeServer {
   readonly token: string;
@@ -103,8 +116,8 @@ export class IdeServer {
   private startPromise: Promise<void> | null = null;
   private abortStart: (() => void) | null = null;
   private currentPort: number | null = null;
-  /** Reused on restart when free, so sessions started earlier find the same port again. */
-  private lastPort = 0;
+  private accepting = true;
+  private disposed = false;
   private unsubscribe: Disposer | null = null;
 
   constructor(private readonly opts: IdeServerOptions) {
@@ -115,12 +128,38 @@ export class IdeServer {
     this.seedDelays = opts.seedDelaysMs ?? SEED_DELAYS_MS;
   }
 
+  /** The bound port; fixed from the first successful `start()` until `dispose()`. */
   get port(): number | null {
     return this.currentPort;
   }
 
+  /** The port is bound (it stays bound until `dispose()`). */
   isRunning(): boolean {
     return this.phase === 'running';
+  }
+
+  /** New WebSocket connections are accepted (default true); otherwise upgrades with the right token get 403. */
+  isAccepting(): boolean {
+    return this.accepting;
+  }
+
+  /**
+   * Turns accepting connections on or off without touching the port. Off closes every connected client, stops
+   * pushing selections and refuses new upgrades (403 after the 401 token check) — synchronous.
+   */
+  setAccepting(on: boolean): void {
+    if (on === this.accepting) return;
+    this.accepting = on;
+    if (on) {
+      if (this.phase === 'running') {
+        this.subscribe();
+        this.log.info(`IDE connection accepting again on ws://${IDE_HOST}:${this.currentPort}`);
+      }
+      return;
+    }
+    this.unsubscribeState();
+    this.dropClients();
+    if (this.phase === 'running') this.log.info('IDE connection turned off: refusing connections (the port is kept until unload)');
   }
 
   /** Initialized (handshake complete) clients. */
@@ -133,11 +172,12 @@ export class IdeServer {
   whenListening(): Promise<void> {
     if (this.phase === 'running') return Promise.resolve();
     if (this.phase === 'starting' && this.startPromise) return this.startPromise;
-    return Promise.reject(new Error('The Claude Code IDE connection is not running (turned off in settings or stopped).'));
+    return Promise.reject(new Error('The Claude Code IDE connection server is not listening (never started, failed to start, or closed).'));
   }
 
-  /** Starts listening (no-op while starting / running). */
+  /** Binds a random free port (no-op while starting / running). Once bound, only `dispose()` closes it (deviation 21). */
   start(): Promise<void> {
+    if (this.disposed) return Promise.reject(new IdeStartAbortedError());
     if (this.phase !== 'stopped' && this.startPromise) return this.startPromise;
     const server = http.createServer((req, res) => {
       res.writeHead(426, { 'Content-Type': 'text/plain', Connection: 'close' });
@@ -172,17 +212,13 @@ export class IdeServer {
         server.once('listening', onListening);
         server.listen({ port, host: IDE_HOST, exclusive: true });
       });
-    // stop() during listen(): Node then emits neither 'listening' nor 'error', so stop() rejects through this hook.
+    // dispose() during listen(): Node then emits neither 'listening' nor 'error', so dispose() rejects through this hook.
     let abort!: () => void;
     const aborted = new Promise<never>((_, reject) => {
-      abort = () => reject(new Error('The Claude Code IDE connection was stopped while starting.'));
+      abort = () => reject(new IdeStartAbortedError());
     });
     this.abortStart = abort;
-    const listening = listen(this.lastPort).catch((err: NodeJS.ErrnoException) => {
-      if (this.lastPort !== 0 && err.code === 'EADDRINUSE' && this.server === server) return listen(0);
-      throw err;
-    });
-    const promise = Promise.race([listening, aborted])
+    const promise = Promise.race([listen(0), aborted])
       .finally(() => {
         if (this.abortStart === abort) this.abortStart = null;
       })
@@ -190,14 +226,13 @@ export class IdeServer {
         () => {
           if (this.server !== server) {
             server.close();
-            throw new Error('The Claude Code IDE connection was stopped while starting.');
+            throw new IdeStartAbortedError();
           }
           this.currentPort = (server.address() as AddressInfo).port;
-          this.lastPort = this.currentPort;
           this.phase = 'running';
           server.on('error', (err) => this.log.error('IDE server error', err));
-          this.unsubscribe = this.opts.state?.onChange((change) => this.broadcast(change.selection)) ?? null;
-          this.log.info(`IDE connection listening on ws://${IDE_HOST}:${this.currentPort}`);
+          if (this.accepting) this.subscribe();
+          this.log.info(`IDE connection listening on ws://${IDE_HOST}:${this.currentPort}${this.accepting ? '' : ' (refusing connections)'}`);
         },
         (err: unknown) => {
           if (this.server === server) this.reset();
@@ -209,35 +244,53 @@ export class IdeServer {
     return promise;
   }
 
-  /** Closes the port and drops every client — synchronous, so it completes during plugin unload. */
-  stop(): void {
+  /**
+   * Plugin unload: closes the port, drops every client and forgets the token — synchronous, so it completes during
+   * unload (R10.9). The server cannot start again afterwards.
+   */
+  dispose(): void {
+    this.disposed = true;
+    this.accepting = false;
+    this.close();
+    this.unregisterSecret();
+  }
+
+  private close(): void {
     const server = this.server;
     const wss = this.wss;
+    this.unsubscribeState();
+    this.dropClients();
     if (!server) return;
     this.reset();
     this.abortStart?.();
-    for (const client of this.clients) {
-      for (const t of client.timers) clearTimeout(t);
-      client.ws.terminate();
-    }
-    this.clients.clear();
     wss?.close();
     server.close();
     server.closeAllConnections?.();
     for (const socket of this.sockets) socket.destroy();
     this.sockets.clear();
-    this.log.info('IDE connection stopped');
+    this.log.info('IDE connection closed');
   }
 
-  /** `stop()` and forget the token (plugin unload). */
-  dispose(): void {
-    this.stop();
-    this.unregisterSecret();
+  private subscribe(): void {
+    if (this.unsubscribe) return;
+    this.unsubscribe = this.opts.state?.onChange((change) => this.broadcast(change.selection)) ?? null;
+  }
+
+  private unsubscribeState(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+  }
+
+  private dropClients(): void {
+    for (const client of this.clients) {
+      for (const t of client.timers) clearTimeout(t);
+      client.ws.terminate();
+    }
+    this.clients.clear();
   }
 
   private reset(): void {
-    this.unsubscribe?.();
-    this.unsubscribe = null;
+    this.unsubscribeState();
     this.server = null;
     this.wss = null;
     this.phase = 'stopped';
@@ -259,15 +312,20 @@ export class IdeServer {
     }
     if (!this.authorized(req)) {
       this.log.warn('IDE connection refused: missing or wrong auth token');
-      socket.once('finish', () => socket.destroy());
-      socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\nUnauthorized');
+      rejectUpgrade(socket, 401, 'Unauthorized', 'Unauthorized');
+      return;
+    }
+    // After the token check, so only the token holder learns that the connection is turned off (deviation 21).
+    if (!this.accepting) {
+      this.log.debug('IDE connection refused: turned off in settings');
+      rejectUpgrade(socket, 403, 'Forbidden', IDE_OFF_MESSAGE);
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => this.accept(ws));
   }
 
   private accept(ws: WebSocket): void {
-    if (!this.wss) {
+    if (!this.wss || !this.accepting) {
       ws.terminate();
       return;
     }
@@ -379,6 +437,12 @@ export class IdeServer {
       if (err) this.log.debug('IDE send failed:', err.message);
     });
   }
+}
+
+/** Answers a WebSocket upgrade with a plain HTTP error and closes the socket. */
+function rejectUpgrade(socket: Duplex, status: number, reason: string, body: string): void {
+  socket.once('finish', () => socket.destroy());
+  socket.end(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
