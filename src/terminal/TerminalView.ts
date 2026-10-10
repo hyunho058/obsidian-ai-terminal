@@ -1,14 +1,14 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { Terminal } from '@xterm/xterm';
+import { Terminal, type ITheme } from '@xterm/xterm';
 import { ItemView, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import { PROFILE_LABELS, TERMINAL_VIEW_TYPE, type PluginContext, type ProfileId, type SessionState, type TerminalViewState } from '../core';
 import type { MirrorSnapshot } from '../session/mirror';
 import { isProfileId, newPanelId, PROFILE_ICONS } from '../session/profiles';
 import type { SessionHandle, SessionsService, TerminalSink, TerminalSize } from '../session/types';
 import { createLinkActivator } from './links';
-import { readObsidianTheme } from './theme';
+import { resolveTheme } from './theme';
 
 /** State accepted by `setState`: the persisted fields plus `launch: 'new'`, set only by the open commands. */
 export interface TerminalViewSetState extends Partial<TerminalViewState> {
@@ -186,9 +186,16 @@ export class TerminalView extends ItemView {
 
   // ------------------------------------------------------------------ settings / theme
 
-  /** Re-reads the Obsidian theme (R2.8; called on `css-change`). */
+  /** Applies the terminal colors (R2.8; called on `css-change` and when the Terminal colors setting changes). */
   applyTheme(): void {
-    if (this.term && this.hostEl) this.term.options.theme = readObsidianTheme(this.hostEl);
+    if (this.term && this.hostEl) this.term.options.theme = this.currentTheme(this.hostEl);
+  }
+
+  /** The xterm theme for the Terminal colors setting; the area around the grid gets the same background. */
+  private currentTheme(hostEl: HTMLElement): ITheme {
+    const theme = resolveTheme(hostEl, this.host.ctx.settings.terminalColors);
+    hostEl.style.backgroundColor = this.host.ctx.settings.terminalColors === 'obsidian' ? '' : theme.background ?? '';
+    return theme;
   }
 
   /** Applies font, scrollback and Option-as-Meta from the settings to the open xterm. */
@@ -274,7 +281,7 @@ export class TerminalView extends ItemView {
       macOptionIsMeta: s.optionIsMeta,
       macOptionClickForcesSelection: true,
       drawBoldTextInBrightColors: true,
-      theme: readObsidianTheme(hostEl),
+      theme: this.currentTheme(hostEl),
       linkHandler: { activate: (event, text) => activate(event, text), allowNonHttpProtocols: false },
     });
     const fitAddon = new FitAddon();

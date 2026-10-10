@@ -79,6 +79,7 @@ export function createTerminalModule(): FeatureModule {
           s.scrollback !== prev.scrollback ||
           s.optionIsMeta !== prev.optionIsMeta;
         if (changed) for (const view of views) view.applySettings();
+        if (s.terminalColors !== prev.terminalColors) for (const view of views) view.applyTheme();
       });
 
       ctx.services.provide('terminals', {

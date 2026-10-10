@@ -184,6 +184,7 @@ describe('AiTerminalSettingTab (R14.1, R14.2)', () => {
       'Python path',
       'Font family',
       'Font size',
+      'Terminal colors',
       'Scrollback',
       'Option key acts as Meta',
       'Bridge tools',
@@ -199,6 +200,16 @@ describe('AiTerminalSettingTab (R14.1, R14.2)', () => {
     expect((byName('Claude Code IDE connection') as ToggleComponent).getValue()).toBe(true);
     expect((byName('Antigravity bridge') as ToggleComponent).getValue()).toBe(true);
     expect((byName('AI session snapshots') as DropdownComponent).getValue()).toBe('ask');
+    expect((byName('Terminal colors') as DropdownComponent).getValue()).toBe('obsidian');
+    expect(Object.keys((byName('Terminal colors') as DropdownComponent).options)).toEqual(['obsidian', 'dark', 'light']);
+  });
+
+  it('Terminal colors: choosing Dark is saved; an unknown stored value falls back to following Obsidian', async () => {
+    const { store, byName } = render();
+    await (byName('Terminal colors') as DropdownComponent).simulateChange('dark');
+    expect(store.settings.terminalColors).toBe('dark');
+    expect(mergeSettings({ terminalColors: 'purple' }).terminalColors).toBe('obsidian');
+    expect(mergeSettings({ terminalColors: 'light' }).terminalColors).toBe('light');
   });
 
   it('the Bridge tools toggle is described in plain words (no MCP / token jargon)', () => {

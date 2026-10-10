@@ -305,6 +305,27 @@ describe('TerminalView', () => {
     expect(harness.pty.spawned).toEqual([proc]);
   });
 
+  it('Terminal colors = Dark gives a black background in an open panel without restarting; back to Obsidian', async () => {
+    const harness = await setup();
+    const { view, proc } = await openRunning(harness, 'shell');
+    const host = view.containerEl.querySelector('.ai-terminal-container') as HTMLElement;
+    expect(view.terminal!.options.theme!.background).not.toBe('#000000');
+    harness.ctx.settings.terminalColors = 'dark';
+    await harness.ctx.saveSettings();
+    expect(view.terminal!.options.theme!.background).toBe('#000000');
+    expect(host.style.backgroundColor).not.toBe('');
+    // Obsidian switching to its dark theme does not override the fixed choice.
+    document.body.classList.add('theme-dark');
+    harness.app.workspace.trigger('css-change');
+    expect(view.terminal!.options.theme!.background).toBe('#000000');
+    document.body.classList.remove('theme-dark');
+    harness.ctx.settings.terminalColors = 'obsidian';
+    await harness.ctx.saveSettings();
+    expect(view.terminal!.options.theme!.background).not.toBe('#000000');
+    expect(host.style.backgroundColor).toBe('');
+    expect(harness.pty.spawned).toEqual([proc]);
+  });
+
   it('applies font / scrollback / Option settings to open panels', async () => {
     const harness = await setup();
     const { view } = await openRunning(harness, 'shell');

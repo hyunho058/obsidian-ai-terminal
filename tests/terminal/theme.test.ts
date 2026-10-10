@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLinkActivator, isWebUrl, openInBrowser } from '../../src/terminal/links';
-import { buildTheme, isDarkTheme, readObsidianTheme } from '../../src/terminal/theme';
+import { buildFixedTheme, buildTheme, isDarkTheme, readObsidianTheme } from '../../src/terminal/theme';
 
 const OBSIDIAN_LIGHT: Record<string, string> = {
   '--background-primary': '#ffffff',
@@ -129,5 +129,17 @@ describe('web links (R2.9)', () => {
     const win = { open: vi.fn() } as unknown as Window;
     openInBrowser('https://example.com', win);
     expect(win.open).toHaveBeenCalledWith('https://example.com', '_external');
+  });
+});
+
+describe('fixed terminal colors (Terminal colors setting)', () => {
+  it('Dark is a black background with light text; Light is white with dark text', () => {
+    const dark = buildFixedTheme('dark');
+    expect(dark.background).toBe('#000000');
+    expect(dark.cursorAccent).toBe('#000000');
+    expect(dark.foreground).toBe('#dadada');
+    const light = buildFixedTheme('light');
+    expect(light.background).toBe('#ffffff');
+    expect(light.foreground).toBe('#222222');
   });
 });

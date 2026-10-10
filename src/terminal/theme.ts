@@ -1,4 +1,5 @@
 import type { ITheme } from '@xterm/xterm';
+import type { TerminalColors } from '../settings';
 
 /** Reads one Obsidian CSS variable (e.g. `--background-primary`); empty string when unset. */
 export type CssVarReader = (name: string) => string;
@@ -111,6 +112,21 @@ export function buildTheme(read: CssVarReader, dark: boolean): ITheme {
     brightWhite: dark ? v('--color-base-100') : v('--color-base-50'),
   };
   return { ...palette, selectionInactiveBackground: palette.selectionBackground };
+}
+
+/**
+ * A fixed palette that ignores the Obsidian theme: Obsidian's default dark colors on a pure black background, or its
+ * default light colors on white.
+ */
+export function buildFixedTheme(mode: 'dark' | 'light'): ITheme {
+  const theme = buildTheme(() => '', mode === 'dark');
+  if (mode === 'dark') return { ...theme, background: '#000000', cursorAccent: '#000000' };
+  return theme;
+}
+
+/** The xterm theme for `el` under the chosen color mode. */
+export function resolveTheme(el: HTMLElement, mode: TerminalColors): ITheme {
+  return mode === 'obsidian' ? readObsidianTheme(el) : buildFixedTheme(mode);
 }
 
 /** True when Obsidian's dark theme is active in `doc` (`body.theme-dark`). */

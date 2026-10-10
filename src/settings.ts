@@ -4,6 +4,15 @@ import type { Disposer } from './core/types';
 
 export type Placement = 'right-sidebar' | 'new-tab' | 'split-below';
 
+/** Terminal color mode: follow the Obsidian theme, or a fixed dark (black background) / light palette. */
+export type TerminalColors = 'obsidian' | 'dark' | 'light';
+
+export const TERMINAL_COLOR_LABELS: Readonly<Record<TerminalColors, string>> = {
+  obsidian: 'Follow Obsidian theme',
+  dark: 'Dark (black background)',
+  light: 'Light (white background)',
+};
+
 export const PLACEMENT_LABELS: Readonly<Record<Placement, string>> = {
   'right-sidebar': 'Right sidebar',
   'new-tab': 'New tab',
@@ -25,6 +34,8 @@ export interface AiTerminalSettings {
   pythonPath: string;
   fontFamily: string;
   fontSize: number;
+  /** Terminal colors (default: follow Obsidian, D9). */
+  terminalColors: TerminalColors;
   scrollback: number;
   /** Option key acts as Meta (D10). */
   optionIsMeta: boolean;
@@ -61,6 +72,7 @@ export function defaultSettings(): AiTerminalSettings {
     pythonPath: '',
     fontFamily: DEFAULT_FONT_FAMILY,
     fontSize: 13,
+    terminalColors: 'obsidian',
     scrollback: 10000,
     optionIsMeta: true,
     bridgeEnabled: true,
@@ -72,6 +84,7 @@ export function defaultSettings(): AiTerminalSettings {
 }
 
 const PLACEMENTS = Object.keys(PLACEMENT_LABELS) as Placement[];
+const TERMINAL_COLOR_MODES = Object.keys(TERMINAL_COLOR_LABELS) as TerminalColors[];
 
 /**
  * Deep-merges stored data over the defaults. Known keys keep the default's type (a value of another type is
@@ -82,6 +95,7 @@ export function mergeSettings(raw: unknown): AiTerminalSettings {
   if (isPlainObject(raw)) deepMergeInto(merged as unknown as Record<string, unknown>, raw);
   const d = defaultSettings();
   if (!PLACEMENTS.includes(merged.placement)) merged.placement = d.placement;
+  if (!TERMINAL_COLOR_MODES.includes(merged.terminalColors)) merged.terminalColors = d.terminalColors;
   if (!Number.isFinite(merged.fontSize) || merged.fontSize < 6 || merged.fontSize > 72) merged.fontSize = d.fontSize;
   if (!Number.isInteger(merged.scrollback) || merged.scrollback < 0 || merged.scrollback > 1_000_000) merged.scrollback = d.scrollback;
   const enabled: unknown = merged.snapshots.enabled;
@@ -288,6 +302,16 @@ export class AiTerminalSettingTab extends PluginSettingTab {
             save();
           }),
       );
+    new Setting(containerEl)
+      .setName('Terminal colors')
+      .setDesc('Background and text colors of the terminal panels.')
+      .addDropdown((dd) => {
+        for (const m of TERMINAL_COLOR_MODES) dd.addOption(m, TERMINAL_COLOR_LABELS[m]);
+        dd.setValue(s.terminalColors).onChange((v) => {
+          s.terminalColors = v as TerminalColors;
+          save();
+        });
+      });
     new Setting(containerEl)
       .setName('Scrollback')
       .setDesc('Lines kept above the screen (0–1000000).')
