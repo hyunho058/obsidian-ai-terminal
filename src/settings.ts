@@ -355,7 +355,7 @@ export class AiTerminalSettingTab extends PluginSettingTab {
       );
     new Setting(containerEl)
       .setName('Antigravity bridge')
-      .setDesc('Register the "obsidian" MCP server with agy (agy mcp add / remove).')
+      .setDesc('Register the "obsidian" MCP server with agy (agy mcp add / remove) and allow its tools in agy\'s settings.')
       .addToggle((tg) =>
         tg.setValue(s.agyBridgeEnabled).onChange((v) => {
           s.agyBridgeEnabled = v;

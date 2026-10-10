@@ -78,6 +78,8 @@ Each item must score **≥ 7/10**.
 
 21. **The IDE WebSocket server also keeps its port for the whole plugin session** (iteration-3 security decision — approved by the user 2026-10-09, answer "Same fix"): once started it is closed only at plugin unload; turning the IDE connection off removes the lock file, closes connected clients and refuses new connections (same port and token kept), and turning it back on rewrites the lock file for the same port.
 
+22. **Antigravity tool permission** (approved by the user 2026-10-09, answer "Plugin adds it"): agy blocks MCP tools until allowed (verified: headless agy auto-denies with "a tool required the 'mcp' permission"). When the plugin owns the `obsidian` agy entry, it adds the allow rule `mcp(obsidian/*)` to `permissions.allow` in `~/.gemini/antigravity-cli/settings.json` (all other keys and rules kept; file mode kept; same agy lock), and removes that rule when the agy bridge is turned off — only if the plugin added it.
+
 ## Autonomy Boundary
 
 **✅ Auto-fix (stay in the loop):** type/format errors; missing in-scope tests; bugs where code fails a sub-requirement's Given/When/Then without changing a Decision; docs/README/comments; local renames; behaviour-preserving refactors that keep Gate 1 green.
@@ -100,8 +102,9 @@ The loop exits only when **every** gate above passes and the Evidence Report is 
 - cause: gate-fail
 - source: human-approved
 - form: gate1-command
-- status: active
+- status: needs-review
 - check: `test ! -e ~/.config/obsidian-ai-terminal && test ! -e ~/.local/share/obsidian-ai-terminal && [ -z "$(find ~/.claude/ide -name '*.lock' -exec grep -l '"ideName": *"Obsidian"' {} + 2>/dev/null)" ]`
+- review (2026-10-09): environmentally stale since the plugin is installed and running in the user's Obsidian — these paths now exist legitimately. Interim check used instead: modification times / listings of the real paths are identical before and after the test commands. Needs the user to re-activate (e.g. run only while Obsidian is closed) or retire.
 - note: zsh aborts on a glob that matches nothing (`~/.claude/ide/*.lock` with an empty folder), which failed the real-state check in iteration 1; gate commands must use `find`, never bare globs.
 
 ### L2 — Every GUI-only requirement needs a README checklist step

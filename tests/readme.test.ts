@@ -44,6 +44,20 @@ describe('README', () => {
     expect(troubleshooting).toMatch(/Settings › Community plugins, turn\s+\*\*AI Terminal\*\* off, then turn it on again/);
   });
 
+  it('Antigravity explains the tool permission rule; Troubleshooting says what to check (deviation 22)', () => {
+    const agy = section('The Obsidian bridge').split('### Antigravity')[1] ?? '';
+    expect(agy).toMatch(/Antigravity asks permission before it uses MCP tools\. The plugin allows the Obsidian tools for you\s+\(`mcp\(obsidian\/\*\)` in agy's settings\) and removes this when you turn the Antigravity bridge off\./);
+    expect(agy).toMatch(/Restart running Antigravity panels after the first setup\./);
+    expect(agy).toContain('`~/.gemini/antigravity-cli/settings.json`');
+    expect(section('Troubleshooting')).toMatch(
+      /\*\*Antigravity does not use the Obsidian tools\*\* → restart the Antigravity panel; check that agy's settings contain\s+`mcp\(obsidian\/\*\)`/,
+    );
+    const safety = section('Safety');
+    expect(safety).toMatch(/the rule `mcp\(obsidian\/\*\)` that allows its tools/);
+    expect(safety).toMatch(/remove the rule `mcp\(obsidian\/\*\)` from\s+`permissions\.allow`/);
+    expect(section('First run checklist')).toMatch(/agy uses the obsidian tool `get_active_note` without asking for permission/);
+  });
+
   it('every First run checklist step says what to expect', () => {
     const checklist = section('First run checklist');
     const steps = checklist.split(/^\d+\. /m).slice(1);

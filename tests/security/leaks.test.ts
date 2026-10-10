@@ -585,8 +585,8 @@ describe('R15.1: tokens never leak', () => {
     expectClean('settings tab', tab.containerEl.textContent ?? '');
 
     const saved = (plugin as unknown as { data: { moduleData: Record<string, unknown> } }).data;
-    // The one-time Diff tool hint is the only module state; it was saved (so moduleData was written at least once).
-    expect(saved.moduleData).toEqual({ ide: { diffHintShown: true } });
+    // Module state: the one-time Diff tool hint and the agy allow-rule flag (deviation 22) — no token in either.
+    expect(saved.moduleData).toEqual({ ide: { diffHintShown: true }, agy: { allowRuleAdded: true } });
     expectClean('data.json', JSON.stringify(saved));
   });
 

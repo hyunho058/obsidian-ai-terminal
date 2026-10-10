@@ -75,6 +75,8 @@ You need a test note, for example `X.md` with a few lines of text.
    Expect: two lines in Claude's input; nothing is sent until you press Enter.
 6. **Antigravity.** Run "Open Antigravity".
    Expect: the Antigravity screen in a new panel, started in your vault folder.
+   Click into `X.md`, then into the Antigravity panel, and ask "which note do I have open?".
+   Expect: agy uses the obsidian tool `get_active_note` without asking for permission, and answers `X.md`.
 7. **AI edits.** Open `X.md`. Ask Claude: "add the line hello at the end of X.md". Approve the edit.
    Expect: the editor shows the new line. You do not need to reload.
 8. **Diffs in the terminal.** In Claude run `/config` → **Diff tool** → **terminal**. Ask Claude to change `X.md`.
@@ -217,6 +219,16 @@ agy has no option to add a server for one session. So the plugin adds **one glob
   This is normal.
 - To remove the entry: turn off Settings › AI Terminal › "Antigravity bridge", or run `agy mcp remove obsidian`.
 
+Antigravity asks permission before it uses MCP tools. The plugin allows the Obsidian tools for you
+(`mcp(obsidian/*)` in agy's settings) and removes this when you turn the Antigravity bridge off.
+Restart running Antigravity panels after the first setup.
+
+- agy's settings file is `~/.gemini/antigravity-cli/settings.json`. The plugin only adds this one rule to
+  `permissions.allow`. All your other settings and rules stay as they are.
+- If you had the rule already, the plugin leaves it there, also when you turn the bridge off.
+- If the file cannot be read (for example, it is not valid JSON), the plugin does not change it and shows a short
+  message. agy then asks before it uses an Obsidian tool. You can allow the tools in agy.
+
 ## Snapshots and restore
 
 ### What is saved, and when
@@ -280,12 +292,13 @@ move to Obsidian's trash (`.trash/`).
   can connect again (run `/ide` in Claude if it does not reconnect). If the switch is off when the plugin starts,
   this port is not opened at all.
 - **Your AI settings stay yours.** The plugin never changes the settings files of Claude Code or Antigravity.
-  Claude gets the bridge only for each session it starts. The one exception is the `obsidian` entry in agy
-  (see [Antigravity](#antigravity)). The plugin also writes a small lock file `~/.claude/ide/<port>.lock`
+  Claude gets the bridge only for each session it starts. The two exceptions are both for agy: the `obsidian` entry
+  and the rule `mcp(obsidian/*)` that allows its tools (see [Antigravity](#antigravity)). The plugin also writes a small lock file `~/.claude/ide/<port>.lock`
   (readable only by you) while the IDE connection is on, and removes it when you turn the connection off or the
   plugin stops.
 - **After you uninstall**, run `agy mcp remove obsidian` in Terminal. Obsidian cannot tell the plugin that it was
-  deleted, so the plugin cannot remove this entry itself. You can also delete `~/.config/obsidian-ai-terminal`
+  deleted, so the plugin cannot remove this entry itself. Also remove the rule `mcp(obsidian/*)` from
+  `permissions.allow` in `~/.gemini/antigravity-cli/settings.json`. You can also delete `~/.config/obsidian-ai-terminal`
   and, if you do not need the history any more, `~/.local/share/obsidian-ai-terminal`.
 - **Snapshot history restarts after a vault move.** Moving or renaming the vault folder starts a new, empty history
   (see [Where the history lives](#where-the-history-lives)).
@@ -310,6 +323,8 @@ move to Obsidian's trash (`.trash/`).
   terminal. Type `/ide` to see the connection. The `get_selection` tool works even without this connection.
 - **Claude shows "Opened changes in Obsidian ⧉" instead of the diff**: `/config` → Diff tool → terminal.
 - **agy shows no obsidian tools outside Obsidian**: this is normal. Only agy started from an Obsidian panel gets them.
+- **Antigravity does not use the Obsidian tools** → restart the Antigravity panel; check that agy's settings contain
+  `mcp(obsidian/*)`. The file is `~/.gemini/antigravity-cli/settings.json`.
 - **"AI session snapshots are off — git is not available"**: install the Command Line Tools with `xcode-select --install`.
 - **More details**: open the developer console (Cmd+Option+I). Lines from this plugin start with `[AI Terminal`.
   For more lines, run `localStorage.setItem('obsidian-ai-terminal:debug', '1')` there and reload the plugin.

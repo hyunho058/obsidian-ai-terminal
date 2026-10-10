@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
-import { createAgyModule, FOREIGN_ENTRY_NOTICE, type AgyModuleOptions } from '../../src/bridge/agyModule';
+import { ALLOW_RULE_NOTICE, createAgyModule, FOREIGN_ENTRY_NOTICE, type AgyModuleOptions } from '../../src/bridge/agyModule';
+import { AGY_ALLOW_RULE, agySettingsPath } from '../../src/bridge/agyPermissions';
 import { AGY_LOCK_FILE, shimCommand } from '../../src/bridge/agyConfig';
 import { createAgyEnvContributor } from '../../src/bridge/agyEnvContributor';
 import type { BridgeEndpoint } from '../../src/bridge/httpServer';
@@ -217,6 +218,193 @@ describe('agy module', () => {
     runtime.unload();
     expect(existsSync(join(supportDir(), AGY_LOCK_FILE))).toBe(false);
     expect(ctx.unloading).toBe(true);
+  });
+});
+
+describe('agy allow rule (deviation 22)', () => {
+  const DUMMY = 'DUMMY-SETTINGS-VALUE-sk-0123456789abcdef';
+  const userSettings = (allow: string[] = ['mcp(chrome_devtools/*)']) => ({
+    allowNonWorkspaceAccess: false,
+    model: 'gemini-3-pro',
+    permissions: { allow },
+    trustedWorkspaces: ['/Users/me/vault'],
+    secretish: DUMMY,
+  });
+  const writeSettings = (raw: string | object): string => {
+    const text = typeof raw === 'string' ? raw : `${JSON.stringify(raw, null, 2)}\n`;
+    mkdirSync(dirname(agySettingsPath()), { recursive: true });
+    writeFileSync(agySettingsPath(), text, { mode: 0o600 });
+    return text;
+  };
+  const readSettings = (): Record<string, any> => JSON.parse(readFileSync(agySettingsPath(), 'utf8'));
+  const flag = (s: Started): unknown => (s.ctx.settings.moduleData.agy as { allowRuleAdded?: boolean } | undefined)?.allowRuleAdded;
+  const rule = (s: Started) => s.ctx.services.require('agyBridge').lastAllowRuleOutcome;
+
+  it('end to end: after ready with the fake agy, both the `obsidian` entry and the allow rule exist (no Notice)', async () => {
+    const fake = newFake();
+    const s = await load(fake);
+    expect(fake.readConfig()!.mcpServers.obsidian).toEqual({ command: PY, args: ['-I', shimPath()], disabled: false });
+    expect(readSettings()).toEqual({ permissions: { allow: [AGY_ALLOW_RULE] } });
+    expect(statSync(agySettingsPath()).mode & 0o777).toBe(0o600);
+    expect(rule(s)).toEqual({ status: 'added' });
+    expect(flag(s)).toBe(true);
+    expect(JSON.parse(JSON.stringify(s.store.settings.moduleData))).toEqual({ agy: { allowRuleAdded: true } });
+    expect(Notice.shown).toEqual([]);
+    expect(existsSync(join(supportDir(), AGY_LOCK_FILE))).toBe(false);
+  });
+
+  it('existing settings: the rule is appended, everything else kept; a second load changes nothing', async () => {
+    const fake = newFake();
+    writeSettings(userSettings());
+    const s1 = await load(fake);
+    expect(readSettings()).toEqual(userSettings(['mcp(chrome_devtools/*)', AGY_ALLOW_RULE]));
+    const raw = readFileSync(agySettingsPath(), 'utf8');
+    const s2 = await load(fake, { moduleData: s1.ctx.settings.moduleData });
+    expect(rule(s2)).toEqual({ status: 'present' });
+    expect(readFileSync(agySettingsPath(), 'utf8')).toBe(raw);
+    expect(flag(s2)).toBe(true); // still ours from the first load
+  });
+
+  it('a rule the user already had: file byte-identical, flag NOT set; turning the bridge off keeps it', async () => {
+    const fake = newFake();
+    const raw = writeSettings(userSettings([AGY_ALLOW_RULE, 'mcp(chrome_devtools/*)']));
+    const s = await load(fake);
+    expect(rule(s)).toEqual({ status: 'present' });
+    expect(readFileSync(agySettingsPath(), 'utf8')).toBe(raw);
+    expect(flag(s)).toBeUndefined();
+    s.store.settings.agyBridgeEnabled = false;
+    await s.ctx.saveSettings();
+    await waitFor(() => s.ctx.services.require('agyBridge').lastOutcome?.status === 'removed');
+    await new Promise((r) => setTimeout(r, 200));
+    expect(fake.readConfig()!.mcpServers.obsidian).toBeUndefined();
+    expect(readFileSync(agySettingsPath(), 'utf8')).toBe(raw);
+  });
+
+  it('turning the bridge off removes the rule the plugin added (others kept, file kept) and clears the flag; on adds it again', async () => {
+    const fake = newFake();
+    writeSettings(userSettings());
+    const s = await load(fake);
+    expect(flag(s)).toBe(true);
+    s.store.settings.agyBridgeEnabled = false;
+    await s.ctx.saveSettings();
+    await waitFor(() => rule(s)?.status === 'removed');
+    expect(readSettings()).toEqual(userSettings());
+    expect(statSync(agySettingsPath()).mode & 0o777).toBe(0o600);
+    await waitFor(() => flag(s) === undefined);
+    expect(fake.readConfig()!.mcpServers.obsidian).toBeUndefined();
+    s.store.settings.agyBridgeEnabled = true;
+    await s.ctx.saveSettings();
+    await waitFor(() => rule(s)?.status === 'added');
+    expect(readSettings()).toEqual(userSettings(['mcp(chrome_devtools/*)', AGY_ALLOW_RULE]));
+    await waitFor(() => flag(s) === true);
+    expect(Notice.shown).toEqual([]);
+  });
+
+  it('turning the bridge off with a user-added rule next to ours removes only ours', async () => {
+    const fake = newFake();
+    writeSettings(userSettings());
+    const s = await load(fake);
+    // The user adds a rule of their own afterwards.
+    const now = readSettings();
+    now.permissions.allow.push('mcp(obsidian/get_selection)');
+    writeSettings(now);
+    s.store.settings.agyBridgeEnabled = false;
+    await s.ctx.saveSettings();
+    await waitFor(() => rule(s)?.status === 'removed');
+    expect(readSettings()).toEqual(userSettings(['mcp(chrome_devtools/*)', 'mcp(obsidian/get_selection)']));
+  });
+
+  it('unparsable settings: byte-identical, skipped, one Notice; the file contents never reach a log line', async () => {
+    setDebugLogging(true);
+    onTestFinished(() => setDebugLogging(false));
+    const fake = newFake();
+    const raw = writeSettings(`{ "model": "x", "token": "${DUMMY}", `);
+    const s = await load(fake, {}, { recheckDelayMs: 20 });
+    expect(rule(s)).toMatchObject({ status: 'skipped', settingsProblem: true });
+    expect(readFileSync(agySettingsPath(), 'utf8')).toBe(raw);
+    expect(Notice.shown.map((n) => n.message)).toEqual([ALLOW_RULE_NOTICE]);
+    expect(flag(s)).toBeUndefined();
+    // A later re-check does not repeat the Notice.
+    s.store.settings.pythonPath = '/usr/bin/python3';
+    await s.ctx.saveSettings();
+    await waitFor(() => fake.mcpCalls('list').length === 2);
+    await waitFor(() => s.out.lines.filter((l) => l.includes('agy allow rule ensure skipped')).length === 2);
+    expect(Notice.shown).toHaveLength(1);
+    expect(s.out.lines.join('\n')).not.toContain(DUMMY);
+    expect(readFileSync(agySettingsPath(), 'utf8')).toBe(raw);
+  });
+
+  it('`permissions.allow` not a list: untouched, one Notice', async () => {
+    const raw = writeSettings({ permissions: { allow: 'mcp(obsidian/*)' }, model: 'x' });
+    const s = await load(newFake());
+    expect(rule(s)).toMatchObject({ status: 'skipped', settingsProblem: true });
+    expect(readFileSync(agySettingsPath(), 'utf8')).toBe(raw);
+    expect(Notice.shown.map((n) => n.message)).toEqual([ALLOW_RULE_NOTICE]);
+  });
+
+  it('a foreign `obsidian` entry: no rule is written (the settings file is not even created)', async () => {
+    const fake = newFake();
+    fake.writeConfig({ mcpServers: { obsidian: { serverUrl: 'http://127.0.0.1:27123/mcp' } } });
+    const s = await load(fake);
+    expect(s.ctx.services.require('agyBridge').lastOutcome).toEqual({ status: 'foreign' });
+    expect(rule(s)).toBeUndefined();
+    expect(existsSync(agySettingsPath())).toBe(false);
+    expect(Notice.shown.map((n) => n.message)).toEqual([FOREIGN_ENTRY_NOTICE]);
+  });
+
+  it('no rule when the entry step fails or is skipped, or when the agy bridge is off', async () => {
+    const fake = newFake();
+    fake.control({ fail: ['add'] });
+    const s1 = await load(fake);
+    expect(s1.ctx.services.require('agyBridge').lastOutcome?.status).toBe('failed');
+    const s2 = await load(null);
+    expect(s2.ctx.services.require('agyBridge').lastOutcome?.status).toBe('skipped');
+    fake.control({});
+    const s3 = await load(fake, { agyBridgeEnabled: false });
+    for (const s of [s1, s2, s3]) expect(rule(s)).toBeUndefined();
+    expect(existsSync(agySettingsPath())).toBe(false);
+  });
+
+  it('two plugin instances ensuring at once: the rule is there exactly once, and only one instance owns it', async () => {
+    const fake = newFake();
+    writeSettings(userSettings());
+    fake.control({ delayMs: 100 });
+    const [a, b] = await Promise.all([load(fake), load(fake)]);
+    expect(readSettings().permissions.allow).toEqual(['mcp(chrome_devtools/*)', AGY_ALLOW_RULE]);
+    expect([rule(a)?.status, rule(b)?.status].sort()).toEqual(['added', 'present']);
+    expect([flag(a), flag(b)].filter((f) => f === true)).toHaveLength(1);
+    expect(fake.calls().some((c) => c.concurrent)).toBe(false);
+  });
+
+  it('the ready step stays bounded when the settings write hangs; unload releases the lock', async () => {
+    const fake = newFake();
+    const t0 = Date.now();
+    const s = await load(fake, {}, { readyTimeoutMs: 400, permissions: { writeNewFile: () => new Promise(() => {}) } });
+    expect(Date.now() - t0).toBeLessThan(2500);
+    expect(s.ctx.isReady()).toBe(true);
+    await waitFor(() => s.ctx.services.require('agyBridge').lastOutcome?.status === 'added');
+    await new Promise((r) => setTimeout(r, 300)); // the rule step is now stuck in its write
+    expect(fake.readConfig()!.mcpServers.obsidian).toBeDefined();
+    expect(existsSync(agySettingsPath())).toBe(false);
+    expect(rule(s)).toBeUndefined();
+    expect(s.out.lines.some((l) => l.includes('still running after 400 ms'))).toBe(true);
+    expect(existsSync(join(supportDir(), AGY_LOCK_FILE))).toBe(true);
+    s.runtime.unload();
+    expect(existsSync(join(supportDir(), AGY_LOCK_FILE))).toBe(false);
+  });
+
+  it('the ready step completes when the settings write fails (logged, no Notice, file untouched)', async () => {
+    const fake = newFake();
+    const raw = writeSettings(userSettings());
+    chmodSync(dirname(agySettingsPath()), 0o500);
+    onTestFinished(() => chmodSync(dirname(agySettingsPath()), 0o700));
+    const s = await load(fake);
+    expect(s.ctx.isReady()).toBe(true);
+    expect(rule(s)).toMatchObject({ status: 'failed' });
+    expect(readFileSync(agySettingsPath(), 'utf8')).toBe(raw);
+    expect(flag(s)).toBeUndefined();
+    expect(Notice.shown).toEqual([]);
+    expect(s.out.lines.some((l) => l.includes('agy allow rule ensure failed'))).toBe(true);
   });
 });
 
