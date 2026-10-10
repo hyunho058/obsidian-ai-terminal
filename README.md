@@ -217,6 +217,9 @@ agy has no option to add a server for one session. So the plugin adds **one glob
 
 - Only agy started **from Obsidian** gets the tools. agy started anywhere else sees an empty `obsidian` server.
   This is normal.
+- agy shows **no note name and no selection** near its input box. Claude shows "⧉ In …" or "⧉ N lines selected"
+  through its IDE connection; agy has nothing like that. agy still sees your note: it reads it with the Obsidian
+  tools when you ask, for example "summarize the note I have open" or "explain my selection".
 - To remove the entry: turn off Settings › AI Terminal › "Antigravity bridge", or run `agy mcp remove obsidian`.
 
 Antigravity asks permission before it uses MCP tools. The plugin allows the Obsidian tools for you
@@ -322,6 +325,8 @@ move to Obsidian's trash (`.trash/`).
   "Claude Code IDE connection" is on. Then start a new Claude panel. Select the text in a **note**, not in the
   terminal. Type `/ide` to see the connection. The `get_selection` tool works even without this connection.
 - **Claude shows "Opened changes in Obsidian ⧉" instead of the diff**: `/config` → Diff tool → terminal.
+- **agy shows no note name when you click a note**: this is normal. Ask about "the note I have open" and agy looks
+  it up (see [Antigravity](#antigravity)).
 - **agy shows no obsidian tools outside Obsidian**: this is normal. Only agy started from an Obsidian panel gets them.
 - **Antigravity does not use the Obsidian tools** → restart the Antigravity panel; check that agy's settings contain
   `mcp(obsidian/*)`. The file is `~/.gemini/antigravity-cli/settings.json`.
