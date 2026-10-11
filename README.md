@@ -58,7 +58,8 @@ Do these steps once after you install. They check the things that only work insi
 You need a test note, for example `X.md` with a few lines of text.
 
 1. **Commands.** Open the developer console (Cmd+Option+I). Press Cmd+P and type `AI Terminal`.
-   Expect: "Open Claude Code", "Open Antigravity", "Open shell" and "Restore notes from before an AI session…".
+   Expect: "Open Claude Code", "Open Antigravity", "Open shell", "Send note path to terminal" and
+   "Restore notes from before an AI session…".
    Expect: no red error lines from AI Terminal (they start with `[AI Terminal`) in the developer console.
 2. **macOS permission.** Run "Open shell". Type `ls` and press Enter.
    Expect: a list of your notes, and no "Operation not permitted". If macOS asks
@@ -119,6 +120,9 @@ You need a test note, for example `X.md` with a few lines of text.
     Wait 5 seconds. In Terminal.app run `pgrep -fl pty_bridge.py`.
     Expect: no output. (No helper, `claude` or `agy` from Obsidian is left running.)
     Start Obsidian again. Expect: the panels come back.
+21. **Send note path.** Open an Antigravity panel. Click into `X.md`, then run "Send note path to terminal" (Cmd+P).
+    Expect: the Antigravity panel shows `@X.md` in its input box, the cursor is there, and nothing was sent yet.
+    Type "summarize this note" and press Enter. Expect: the answer is about `X.md`.
 
 ## Usage
 
@@ -133,6 +137,18 @@ You need a test note, for example `X.md` with a few lines of text.
   - Split below current note: below the note you are editing.
 - **More than one panel**: open as many as you like, for example Claude and Antigravity side by side.
   Each panel runs its own program.
+
+### Sending a note's path to a panel
+
+Click into a note, then run **"Send note path to terminal"** (Cmd+P; you can give it a hotkey in Settings › Hotkeys).
+It types the note's path into a terminal panel and puts the cursor there. It does not press Enter, so you can add
+your question.
+
+- Claude Code and Antigravity get an @ mention: `@IELTS/Grammar/note.md`, or `@"IELTS/Grammar/my note.md"` when the
+  path has spaces. Claude Code reads the note right away. Antigravity shows the path and reads the note when it
+  needs it.
+- Shell gets the path, in quotes when it has spaces.
+- The path goes to the panel you used last. If no panel is open, the command tells you to open one.
 
 ### Moving and closing panels
 
@@ -220,6 +236,8 @@ agy has no option to add a server for one session. So the plugin adds **one glob
 - agy shows **no note name and no selection** near its input box. Claude shows "⧉ In …" or "⧉ N lines selected"
   through its IDE connection; agy has nothing like that. agy still sees your note: it reads it with the Obsidian
   tools when you ask, for example "summarize the note I have open" or "explain my selection".
+  To put the path in agy's input box, run "Send note path to terminal" (see
+  [Sending a note's path](#sending-a-notes-path-to-a-panel)).
 - To remove the entry: turn off Settings › AI Terminal › "Antigravity bridge", or run `agy mcp remove obsidian`.
 
 Antigravity asks permission before it uses MCP tools. The plugin allows the Obsidian tools for you
@@ -326,7 +344,7 @@ move to Obsidian's trash (`.trash/`).
   terminal. Type `/ide` to see the connection. The `get_selection` tool works even without this connection.
 - **Claude shows "Opened changes in Obsidian ⧉" instead of the diff**: `/config` → Diff tool → terminal.
 - **agy shows no note name when you click a note**: this is normal. Ask about "the note I have open" and agy looks
-  it up (see [Antigravity](#antigravity)).
+  it up, or run "Send note path to terminal" to type the path into the panel (see [Antigravity](#antigravity)).
 - **agy shows no obsidian tools outside Obsidian**: this is normal. Only agy started from an Obsidian panel gets them.
 - **Antigravity does not use the Obsidian tools** → restart the Antigravity panel; check that agy's settings contain
   `mcp(obsidian/*)`. The file is `~/.gemini/antigravity-cli/settings.json`.

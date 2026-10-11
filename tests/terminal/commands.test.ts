@@ -16,13 +16,14 @@ afterEach(() => {
 });
 
 describe('commands and ribbon (D1–D3, R1.1–R1.4)', () => {
-  it('registers "Open Claude Code", "Open Antigravity", "Open shell" (and leaves the restore command to T10)', async () => {
+  it('registers "Open Claude Code", "Open Antigravity", "Open shell", "Send note path to terminal" (and leaves the restore command to T10)', async () => {
     h = await makeViewHarness();
     const commands = h.plugin.commands.map((c) => [c.id, c.name]);
     expect(commands).toEqual([
       ['obsidian-ai-terminal:open-claude-code', 'Open Claude Code'],
       ['obsidian-ai-terminal:open-antigravity', 'Open Antigravity'],
       ['obsidian-ai-terminal:open-shell', 'Open shell'],
+      ['obsidian-ai-terminal:send-note-path', 'Send note path to terminal'],
     ]);
     expect(OPEN_COMMANDS.map((c) => c.profile)).toEqual(['claude', 'agy', 'shell']);
   });
@@ -31,7 +32,9 @@ describe('commands and ribbon (D1–D3, R1.1–R1.4)', () => {
     h = await makeViewHarness();
     const harness = h;
     const focus = vi.spyOn(TerminalView.prototype, 'focusTerminal');
-    for (const [i, cmd] of h.plugin.commands.entries()) {
+    const openCommands = h.plugin.commands.filter((c) => OPEN_COMMANDS.some((o) => c.id.endsWith(`:${o.id}`)));
+    expect(openCommands).toHaveLength(3);
+    for (const [i, cmd] of openCommands.entries()) {
       cmd.callback!();
       await waitFor(() => harness.pty.calls.length === i + 1);
     }

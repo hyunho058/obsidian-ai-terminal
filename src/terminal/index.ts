@@ -1,10 +1,12 @@
 import type { WorkspaceLeaf } from 'obsidian';
 import { TERMINAL_VIEW_TYPE, TypedEmitter, type Disposer, type FeatureModule, type ProfileId } from '../core';
 import { openTerminal, registerCommands, type OpenTerminalOptions } from './commands';
+import { registerSendNotePath } from './notePath';
 import { TerminalView, type TerminalViewHost } from './TerminalView';
 
 export * from './commands';
 export * from './links';
+export * from './notePath';
 export * from './theme';
 export * from './TerminalView';
 
@@ -18,6 +20,8 @@ export interface TerminalViewsService {
   viewOf(panelId: string): TerminalView | undefined;
   /** The terminal view in `leaf`, if any. */
   viewOfLeaf(leaf: WorkspaceLeaf): TerminalView | undefined;
+  /** The focused terminal view, else the one focused last, else the newest one. */
+  recent(): TerminalView | undefined;
   /** Called once per view when it gets its first state (profile / panelId known, xterm created) — e.g. to set `view.scope`. */
   onViewOpen(listener: (view: TerminalView) => void): Disposer;
   onViewClose(listener: (view: TerminalView) => void): Disposer;
@@ -46,6 +50,7 @@ export function createTerminalModule(): FeatureModule {
     register(ctx) {
       const sessions = ctx.services.require('sessions');
       const views = new Set<TerminalView>();
+      let lastFocused: TerminalView | undefined;
       const events = new TypedEmitter<{ open: TerminalView; close: TerminalView }>((m, e) => ctx.log.error(m, e));
       const isTearingDown = (): boolean => tearingDown || ctx.unloading;
       const host: TerminalViewHost = {
@@ -58,6 +63,7 @@ export function createTerminalModule(): FeatureModule {
         },
         viewClosed: (view) => {
           views.delete(view);
+          if (lastFocused === view) lastFocused = undefined;
           events.emit('close', view);
         },
       };
@@ -69,8 +75,21 @@ export function createTerminalModule(): FeatureModule {
         sessions.stopAll('unload');
       });
 
+      ctx.plugin.registerEvent(
+        ctx.app.workspace.on('active-leaf-change', (leaf) => {
+          if (leaf?.view instanceof TerminalView) lastFocused = leaf.view;
+        }),
+      );
+      const recent = (): TerminalView | undefined => {
+        const active = ctx.app.workspace.getActiveViewOfType(TerminalView);
+        if (active && views.has(active)) return active;
+        if (lastFocused && views.has(lastFocused)) return lastFocused;
+        return [...views].pop();
+      };
+
       const open = (profile: ProfileId, options?: OpenTerminalOptions) => openTerminal(ctx, profile, options);
       registerCommands(ctx, open);
+      registerSendNotePath(ctx, recent);
 
       ctx.onSettingsChange((s, prev) => {
         const changed =
@@ -90,6 +109,7 @@ export function createTerminalModule(): FeatureModule {
           return matching.find((v) => v.session !== undefined) ?? matching[0];
         },
         viewOfLeaf: (leaf) => (leaf.view instanceof TerminalView ? leaf.view : undefined),
+        recent,
         onViewOpen: (listener) => events.on('open', listener),
         onViewClose: (listener) => events.on('close', listener),
         isTearingDown,
