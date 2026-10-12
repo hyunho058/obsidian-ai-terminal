@@ -29,11 +29,11 @@ Done when: the plugin is installed in the user's vault; from inside Obsidian the
 ## Research
 
 ### Project
-- Project directory is empty (no code, no `package.json`, not a git repo) — greenfield (`/Users/hyunhokim/IdeaProjects/obsidian-terminal/`).
+- Project directory is empty (no code, no `package.json`, not a git repo) — greenfield (`~/IdeaProjects/obsidian-terminal/`).
 
 ### Host environment (macOS, arm64)
 - Obsidian app 1.14.4 (`~/Library/Application Support/obsidian/obsidian-1.14.4.asar`), installer 1.8.10, Electron 34.2.0 / Chrome 132 (`/Applications/Obsidian.app/.../Electron Framework`). Desktop plugins get Node.js `require` (`child_process`, `http`, `net`, `crypto`).
-- 4 vaults registered; open vault is `~/Documents/Notes` (`~/Library/Application Support/obsidian/obsidian.json`). Others: `~/Documents/Obsidian Vault`, iCloud `iCloud~md~obsidian/Documents`, Google Drive `My Drive/Obsidian/interview`.
+- 4 vaults registered; open vault is `~/Documents/Notes` (`~/Library/Application Support/obsidian/obsidian.json`). Others: `~/Documents/Obsidian Vault`, iCloud `iCloud~md~obsidian/Documents`, and one in Google Drive.
 - macOS privacy (TCC) blocked the current terminal session from listing any vault ("Operation not permitted"); processes spawned by Obsidian should inherit Obsidian's own folder access — must be confirmed in-app.
 - `claude` 2.1.290 and `agy` 1.2.17 are native Mach-O arm64 binaries in `~/.local/bin` — no Node needed to run them.
 - PATH: with a GUI-like minimal env (`PATH=/usr/bin:/bin`) `claude` is NOT found; via `zsh -lic` both `claude` and `agy` resolve. Obsidian launched from the Dock gets the minimal env.
