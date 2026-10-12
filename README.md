@@ -26,7 +26,8 @@ What you get:
 ## What you need
 
 - A **Mac** with the **Obsidian desktop app**, version 1.8 or newer. Windows, Linux and phones are not supported.
-- **Claude Code** or the **Antigravity CLI** (or both), and an account for it:
+- **Claude Code** or the **Antigravity CLI** (or both), and an account for it. Claude Code needs a paid Claude plan
+  (Pro or Max) or Anthropic API credits:
   - Claude Code: [install guide](https://code.claude.com/docs/en/setup)
   - Antigravity CLI: [install guide](https://antigravity.google/product/antigravity-cli)
 - **Apple's command line tools.** The plugin needs Python and git, which come with them. Open the **Terminal** app,
@@ -38,7 +39,8 @@ What you get:
 
   Then follow the window that opens. If it says the tools are already installed, you are done.
 
-To check that the AI is ready, type `claude --version` (or `agy --version`) in Terminal. You should see a version number.
+To check that the AI is ready, type `claude --version` (or `agy --version`) in Terminal and press Enter. You should
+see a version number.
 
 ## Install
 
@@ -116,8 +118,9 @@ They stay on your Mac, outside the vault.
 
 - **"Command not found: claude"**: Obsidian cannot find the AI program. In Terminal, run `which claude`
   (or `which agy`). Copy the path it prints, for example `/Users/you/.local/bin/claude`, into
-  Settings › AI Terminal › "Claude Code command" (or "Antigravity command").
-- **"Python 3 not found"**: install Apple's command line tools (see [What you need](#what-you-need)).
+  Settings › AI Terminal › Profiles › "Claude Code command" (or "Antigravity command").
+- **"Python 3 not found"**: install Apple's command line tools (see [What you need](#what-you-need)). If you already
+  have Python 3, put its path (from `which python3`) into Settings › AI Terminal › "Python path".
 - **macOS blocked access** ("Operation not permitted"): open System Settings › Privacy & Security ›
   Files and Folders › Obsidian and turn on the folder of your vault. Then open a new panel.
 - **A message says "Reload the plugin"**: in Settings › Community plugins, turn **AI Terminal** off, then on again.
@@ -133,7 +136,7 @@ Obsidian asks plugins to say this clearly. In short: no payment, no ads, no tele
 connects to the internet.
 
 - **Account.** The plugin is free and needs no account. The AI tools need their own: Claude Code needs an
-  Anthropic account, Antigravity needs a Google account.
+  Anthropic account with a paid plan or API credits, Antigravity needs a Google account.
 - **Network.** The plugin runs a small server that only your own Mac can reach (`127.0.0.1`, locked with a key). The
   AI tools in its panels use it to read the open note and the selection. The AI tools themselves connect to their
   companies (Anthropic, Google) and send what you ask and the notes they read — the same as when you use them in
