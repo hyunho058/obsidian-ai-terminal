@@ -138,9 +138,9 @@ export class CloseFlow {
     if (this.original) return;
     const proto = WorkspaceLeaf.prototype as unknown as { detach: DetachFn };
     const original = proto.detach;
-    const flow = this;
+    const shouldAsk = (leaf: WorkspaceLeaf) => this.shouldAsk(leaf);
     const wrapper: DetachFn = function (this: WorkspaceLeaf): void {
-      if (flow.shouldAsk(this)) return;
+      if (shouldAsk(this)) return;
       original.call(this);
     };
     proto.detach = wrapper;
@@ -203,7 +203,7 @@ export class CloseFlow {
     const batch = this.pending.splice(0).filter((p) => this.stillOpen(p));
     if (!this.active || batch.length === 0) return;
     for (const p of batch) this.asking.add(p.leaf);
-    const request: CloseRequest = { labels: batch.map((p) => p.view.label), win: windowOf(batch[0]!.view) };
+    const request: CloseRequest = { labels: batch.map((p) => p.view.label), win: windowOf(batch[0].view) };
     const confirm = this.options.confirm ?? ((r: CloseRequest) => this.ask(r));
     void Promise.resolve()
       .then(() => confirm(request))

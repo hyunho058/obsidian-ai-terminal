@@ -15,7 +15,7 @@ export function openModalIn(modal: Modal, win: Window | null): void {
   const swap = !!win && !!previous.win && win !== previous.win && !win.closed;
   if (swap) {
     g.activeWindow = win!;
-    g.activeDocument = win!.document;
+    g.activeDocument = win.document;
   }
   try {
     modal.open();

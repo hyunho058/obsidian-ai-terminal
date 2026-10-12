@@ -126,13 +126,13 @@ export function parseArgs(input: string): string[] {
   let inToken = false;
   let quote: '"' | "'" | null = null;
   for (let i = 0; i < input.length; i++) {
-    const ch = input[i] as string;
+    const ch = input[i];
     if (quote === "'") {
       if (ch === "'") quote = null;
       else cur += ch;
     } else if (quote === '"') {
       if (ch === '"') quote = null;
-      else if (ch === '\\' && i + 1 < input.length && '"\\$`'.includes(input[i + 1] as string)) cur += input[++i];
+      else if (ch === '\\' && i + 1 < input.length && '"\\$`'.includes(input[i + 1])) cur += input[++i];
       else cur += ch;
     } else if (ch === "'" || ch === '"') {
       quote = ch;

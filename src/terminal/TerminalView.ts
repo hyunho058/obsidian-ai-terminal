@@ -58,16 +58,16 @@ export class TerminalView extends ItemView {
     private readonly host: TerminalViewHost,
   ) {
     super(leaf);
-    const view = this;
+    const currentTerm = () => this.term;
     this.sink = {
       get terminal() {
-        return view.term;
+        return currentTerm();
       },
-      write: (data) => view.term?.write(data),
-      restore: (snapshot) => view.restore(snapshot),
-      measure: () => view.measure(),
-      identityChanged: (identity) => view.onIdentityChanged(identity),
-      stateChanged: (state) => view.onSessionState(state),
+      write: (data) => this.term?.write(data),
+      restore: (snapshot) => this.restore(snapshot),
+      measure: () => this.measure(),
+      identityChanged: (identity) => this.onIdentityChanged(identity),
+      stateChanged: (state) => this.onSessionState(state),
     };
   }
 

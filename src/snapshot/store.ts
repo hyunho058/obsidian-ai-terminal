@@ -10,8 +10,8 @@ import type { ChangedFile, SnapshotInfo, SnapshotMeta } from './types';
 
 /** Note types that are snapshotted (D31); attachments are not. */
 export const TRACKED_PATTERNS: readonly string[] = ['*.md', '*.canvas', '*.base'];
-/** Folders never snapshotted (plus the vault's config folder if it is not `.obsidian`). */
-export const EXCLUDED_DIRS: readonly string[] = ['.obsidian', '.trash'];
+/** Folders never snapshotted, besides the vault's config folder (`app.vault.configDir`). */
+export const EXCLUDED_DIRS: readonly string[] = ['.trash'];
 const VAULT_PATH_KEY = 'obsidian-ai-terminal.vaultpath';
 const DEFAULT_LIST_LIMIT = 500;
 
@@ -44,7 +44,7 @@ export function storePathFor(vaultPath: string, home: string = os.homedir()): st
 }
 
 /** Pathspecs of the snapshotted notes (R12.12): note types anywhere, minus config / trash folders. */
-export function snapshotPathspecs(configDir = '.obsidian'): string[] {
+export function snapshotPathspecs(configDir: string): string[] {
   const dirs = new Set(EXCLUDED_DIRS);
   const cfg = configDir.replace(/^\/+|\/+$/g, '');
   if (cfg) dirs.add(cfg);
@@ -63,7 +63,7 @@ export interface SnapshotStoreOptions {
   /** Defaults to `storePathFor(vaultPath)`. */
   storePath?: string;
   /** `app.vault.configDir`. */
-  configDir?: string;
+  configDir: string;
   log?: Logger;
 }
 

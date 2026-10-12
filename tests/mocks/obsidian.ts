@@ -208,6 +208,9 @@ export function installDomShims(): void {
   P.hide = function () {
     this.style.display = 'none';
   };
+  P.setCssProps = function (props: Record<string, string>) {
+    for (const [k, v] of Object.entries(props)) this.style.setProperty(k, v);
+  };
 }
 
 installDomShims();

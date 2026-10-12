@@ -293,7 +293,7 @@ interface AgyModuleData {
 
 function agyData(ctx: PluginContext): AgyModuleData {
   const data = ctx.settings.moduleData.agy;
-  return data && typeof data === 'object' && !Array.isArray(data) ? (data as AgyModuleData) : {};
+  return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
 }
 
 function noticeAfterToggleOn(outcome: EnsureOutcome): void {

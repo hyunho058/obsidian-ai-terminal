@@ -58,15 +58,9 @@ describe('snapshot store (real git)', () => {
     expect(files).toEqual(['board.canvas', 'deep/er/sub.md', 'deep/ignored.md', 'note.md', 'table.base']);
   });
 
-  it("a custom config folder is excluded too", () => {
-    expect(snapshotPathspecs('.config-obsidian')).toEqual([
-      '*.md',
-      '*.canvas',
-      '*.base',
-      ':(exclude).obsidian/**',
-      ':(exclude).trash/**',
-      ':(exclude).config-obsidian/**',
-    ]);
+  it('the config folder (app.vault.configDir, also a custom one) and .trash are excluded', () => {
+    expect(snapshotPathspecs('.config-obsidian')).toEqual(['*.md', '*.canvas', '*.base', ':(exclude).trash/**', ':(exclude).config-obsidian/**']);
+    expect(snapshotPathspecs('.obsidian')).toEqual(['*.md', '*.canvas', '*.base', ':(exclude).trash/**', ':(exclude).obsidian/**']);
   });
 
   it('R12.13: own identity; the user git config (gpgsign, hooksPath, identity env) neither applies nor changes', async () => {
@@ -220,7 +214,7 @@ describe('snapshot store (real git)', () => {
     await store.snapshot({ kind: 'first' });
     const moved = `${vault}-moved`;
     renameSync(vault, moved);
-    const other = new (store.constructor as typeof import('../../src/snapshot/store').SnapshotStore)({ vaultPath: moved, git: new GitRunner(REAL_GIT), storePath: store.storePath });
+    const other = new (store.constructor as typeof import('../../src/snapshot/store').SnapshotStore)({ vaultPath: moved, git: new GitRunner(REAL_GIT), storePath: store.storePath, configDir: '.obsidian' });
     await expect(other.snapshot({ kind: 'first' })).rejects.toThrow(/belongs to another vault/);
   });
 

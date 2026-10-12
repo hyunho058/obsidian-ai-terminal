@@ -80,6 +80,8 @@ export class VaultFiles {
     const file = this.find(nfc);
     if (file instanceof TFolder) throw new Error('a folder now has this name');
     if (file) {
+      // Always Obsidian's .trash (R13), not FileManager.trashFile(): a "delete permanently" preference must not
+      // make a restore lose a note.
       await this.vault.trash(file, false);
       this.nfcIndex?.delete(file.path.normalize('NFC'));
       return true;

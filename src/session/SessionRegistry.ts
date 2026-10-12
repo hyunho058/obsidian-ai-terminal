@@ -513,14 +513,13 @@ export class SessionRegistry implements SessionsService {
     this.graceMs = options.graceMs ?? GRACE_MS;
     this.duplicateWindowMs = options.duplicateWindowMs ?? DUPLICATE_WINDOW_MS;
     this.emitter = new TypedEmitter<SessionRegistryEvents>((m, e) => this.log.error(m, e));
-    const registry = this;
     this.host = {
       ctx,
       log: this.log,
       nudgeDelayMs: options.nudgeDelayMs ?? NUDGE_DELAY_MS,
-      emit: (event, payload) => registry.emitter.emit(event, payload),
+      emit: (event, payload) => this.emitter.emit(event, payload),
       restart: (session) => {
-        void session.restart().catch((err) => registry.log.error('restart failed', err));
+        void session.restart().catch((err) => this.log.error('restart failed', err));
       },
     };
   }
@@ -567,7 +566,7 @@ export class SessionRegistry implements SessionsService {
     if (!session) return;
     const i = session.pending.findIndex((p) => p.sink === sink);
     if (i >= 0) {
-      clearTimeout(session.pending[i]!.timer);
+      clearTimeout(session.pending[i].timer);
       session.pending.splice(i, 1);
       return;
     }
