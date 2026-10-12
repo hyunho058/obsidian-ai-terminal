@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 // Usage: npm run install-plugin -- <vault path> [--dist <dir>]
-// Copies the built plugin (dist/) into <vault>/.obsidian/plugins/obsidian-ai-terminal/.
+// Copies the built plugin (dist/) into <vault>/.obsidian/plugins/ai-terminal/.
 // Existing files there that are not part of the build (e.g. data.json with the settings) are left alone.
+// Settings of the plugin's first id (plugins/obsidian-ai-terminal/data.json) are copied over once.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-export const PLUGIN_ID = 'obsidian-ai-terminal';
+export const PLUGIN_ID = 'ai-terminal';
+/** The plugin's first id; Community directory ids may not contain "obsidian". */
+export const LEGACY_PLUGIN_ID = 'obsidian-ai-terminal';
 export const REQUIRED_FILES = ['main.js', 'manifest.json', 'styles.css'];
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -53,9 +56,10 @@ export function permissionHelp(target, distDir) {
 }
 
 /**
- * Copies `distDir` into `<vault>/.obsidian/plugins/obsidian-ai-terminal/`.
+ * Copies `distDir` into `<vault>/.obsidian/plugins/ai-terminal/`. When the folder of the first id exists, its
+ * data.json is copied over if the new folder has none, and `legacy` names that folder.
  * `fsp` can be replaced in tests (e.g. to simulate EPERM).
- * @returns {Promise<{ target: string, files: string[] }>}
+ * @returns {Promise<{ target: string, files: string[], legacy: string | null, copiedSettings: boolean }>}
  */
 export async function installPlugin({ vault, distDir = path.join(ROOT, 'dist'), fsp = fs.promises }) {
   if (!vault) throw new InstallError('USAGE', 'Usage: npm run install-plugin -- <vault path>');
@@ -117,7 +121,15 @@ export async function installPlugin({ vault, distDir = path.join(ROOT, 'dist'), 
     };
     await copyDir(distDir, target, '');
   });
-  return { target, files: files.sort() };
+
+  const legacyDir = path.join(configDir, 'plugins', LEGACY_PLUGIN_ID);
+  const legacy = fs.existsSync(legacyDir) ? legacyDir : null;
+  let copiedSettings = false;
+  if (legacy && fs.existsSync(path.join(legacy, 'data.json')) && !fs.existsSync(path.join(target, 'data.json'))) {
+    await guard('Copying the settings', () => fsp.copyFile(path.join(legacy, 'data.json'), path.join(target, 'data.json')));
+    copiedSettings = true;
+  }
+  return { target, files: files.sort(), legacy, copiedSettings };
 }
 
 /**
@@ -136,10 +148,16 @@ export async function main(argv = process.argv.slice(2), out = console) {
     } else vault = argv[i];
   }
   try {
-    const { target, files } = await installPlugin({ vault, ...(distDir ? { distDir: path.resolve(distDir) } : {}) });
+    const { target, files, legacy, copiedSettings } = await installPlugin({ vault, ...(distDir ? { distDir: path.resolve(distDir) } : {}) });
     out.log(`Installed ${files.length} files into ${target}:`);
     for (const f of files) out.log(`  ${f}`);
     out.log('');
+    if (legacy) {
+      if (copiedSettings) out.log(`Copied your settings (data.json) from the old plugin folder.`);
+      out.log(`The old plugin folder is still there: ${legacy}`);
+      out.log('Quit Obsidian and delete that folder, so the plugin does not run twice.');
+      out.log('');
+    }
     out.log('Next: in Obsidian open Settings › Community plugins, turn off Restricted mode if needed, and enable "AI Terminal"');
     out.log('(if it was already enabled, turn it off and on again to load the new version).');
     return 0;

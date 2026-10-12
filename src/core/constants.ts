@@ -1,5 +1,11 @@
 /** Plugin id — must match manifest.json. */
-export const PLUGIN_ID = 'obsidian-ai-terminal';
+export const PLUGIN_ID = 'ai-terminal';
+
+/**
+ * Folder name under `~/.config` and `~/.local/share`. Kept from the plugin's first id, so existing snapshot
+ * history and the agy entry's shim path stay valid.
+ */
+export const DATA_DIR_NAME = 'obsidian-ai-terminal';
 
 /** View type of every terminal panel (registered by T3; T4/T6 use it to recognise terminal leaves). */
 export const TERMINAL_VIEW_TYPE = 'ai-terminal';

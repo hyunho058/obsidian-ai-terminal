@@ -85,7 +85,7 @@ export function gitWrapper(opts: WrapperOptions): string {
 }
 
 export function newStore(vault: string, gitPath = REAL_GIT, log?: Logger): SnapshotStore {
-  return new SnapshotStore({ vaultPath: vault, git: new GitRunner(gitPath), log });
+  return new SnapshotStore({ vaultPath: vault, git: new GitRunner(gitPath), log, configDir: '.obsidian' });
 }
 
 /** Plain git (real binary, isolated config) against a store, for assertions. */

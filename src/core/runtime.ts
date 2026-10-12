@@ -53,7 +53,7 @@ export class PluginRuntime {
     const sessionEvents = new SessionEvents(report);
     const supportScripts = new SupportScripts(opts.pluginDir, this.log.child('support'));
     const store = opts.settingsStore;
-    const runtime = this;
+    const isUnloading = () => this.unloading;
 
     this.ctx = {
       app: opts.app,
@@ -62,7 +62,7 @@ export class PluginRuntime {
       saveSettings: () => store.save(),
       onSettingsChange: (listener) => {
         const dispose = store.onChange(listener);
-        runtime.settingsDisposers.push(dispose);
+        this.settingsDisposers.push(dispose);
         return dispose;
       },
       vaultPath: opts.vaultPath,
@@ -75,13 +75,13 @@ export class PluginRuntime {
       sessionEvents,
       supportScripts,
       ready,
-      isReady: () => runtime.readyDone,
+      isReady: () => this.readyDone,
       get unloading() {
-        return runtime.unloading;
+        return isUnloading();
       },
       onUnload: (cb) => {
-        if (runtime.unloading) runtime.runCallback('onUnload callback', cb);
-        else runtime.unloadCallbacks.push(cb);
+        if (this.unloading) this.runCallback('onUnload callback', cb);
+        else this.unloadCallbacks.push(cb);
       },
     };
   }
@@ -150,8 +150,8 @@ export class PluginRuntime {
   private runCallback(label: string, cb: () => void | Promise<void>): void {
     try {
       const r = cb();
-      if (r && typeof (r as Promise<void>).then === 'function') {
-        (r as Promise<void>).catch((err) => this.log.error(`${label} failed`, err));
+      if (r && typeof r.then === 'function') {
+        r.catch((err) => this.log.error(`${label} failed`, err));
       }
     } catch (err) {
       this.log.error(`${label} failed`, err);

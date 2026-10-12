@@ -7,7 +7,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { InstallError, installPlugin, isPermissionError, main } from '../scripts/install-plugin.mjs';
 
 const SCRIPT = fileURLToPath(new URL('../scripts/install-plugin.mjs', import.meta.url));
-const TARGET = join('.obsidian', 'plugins', 'obsidian-ai-terminal');
+const TARGET = join('.obsidian', 'plugins', 'ai-terminal');
+const LEGACY = join('.obsidian', 'plugins', 'obsidian-ai-terminal');
 
 let dist: string;
 let vault: string;
@@ -15,9 +16,8 @@ let vault: string;
 function makeDist(): string {
   const d = mkdtempSync(join(tmpdir(), 'dist-'));
   writeFileSync(join(d, 'main.js'), 'module.exports = {};');
-  writeFileSync(join(d, 'manifest.json'), JSON.stringify({ id: 'obsidian-ai-terminal', version: '0.1.0' }));
+  writeFileSync(join(d, 'manifest.json'), JSON.stringify({ id: 'ai-terminal', version: '0.1.0' }));
   writeFileSync(join(d, 'styles.css'), '.x{}');
-  writeFileSync(join(d, 'pty_bridge.py'), '# helper');
   return d;
 }
 
@@ -38,16 +38,33 @@ beforeEach(() => {
 });
 
 describe('install-plugin (R16.2)', () => {
-  it('CLI copies dist/ into <vault>/.obsidian/plugins/obsidian-ai-terminal and keeps data.json', () => {
+  it('CLI copies dist/ into <vault>/.obsidian/plugins/ai-terminal and keeps data.json', () => {
     mkdirSync(join(vault, TARGET), { recursive: true });
     writeFileSync(join(vault, TARGET, 'data.json'), '{"fontSize":20}');
     const r = spawnSync(process.execPath, [SCRIPT, vault, '--dist', dist], { encoding: 'utf8' });
     expect(r.status).toBe(0);
-    for (const f of ['main.js', 'manifest.json', 'styles.css', 'pty_bridge.py']) {
+    for (const f of ['main.js', 'manifest.json', 'styles.css']) {
       expect(readFileSync(join(vault, TARGET, f), 'utf8')).toBe(readFileSync(join(dist, f), 'utf8'));
     }
     expect(readFileSync(join(vault, TARGET, 'data.json'), 'utf8')).toBe('{"fontSize":20}');
-    expect(r.stdout).toContain('Installed 4 files');
+    expect(r.stdout).toContain('Installed 3 files');
+    expect(r.stdout).not.toContain('old plugin folder');
+  });
+
+  it('copies the settings of the old plugin folder (first id) once and says to delete that folder', async () => {
+    mkdirSync(join(vault, LEGACY), { recursive: true });
+    writeFileSync(join(vault, LEGACY, 'data.json'), '{"fontSize":16}');
+    const out = quietOut();
+    expect(await main([vault, '--dist', dist], out)).toBe(0);
+    expect(readFileSync(join(vault, TARGET, 'data.json'), 'utf8')).toBe('{"fontSize":16}');
+    expect(out.lines.join('\n')).toContain('Copied your settings');
+    expect(out.lines.join('\n')).toContain(`The old plugin folder is still there: ${join(vault, LEGACY)}`);
+
+    // A second install keeps the new settings.
+    writeFileSync(join(vault, TARGET, 'data.json'), '{"fontSize":18}');
+    const again = await installPlugin({ vault, distDir: dist });
+    expect(again).toMatchObject({ legacy: join(vault, LEGACY), copiedSettings: false });
+    expect(readFileSync(join(vault, TARGET, 'data.json'), 'utf8')).toBe('{"fontSize":18}');
   });
 
   it('expands ~ in the vault path', async () => {

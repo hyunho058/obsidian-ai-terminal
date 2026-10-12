@@ -235,7 +235,7 @@ export function restoreSummary(done: RestoreDone, now: Date = new Date()): strin
   if (m > 0) parts.push(`${n > 0 ? 'moved' : 'Moved'} ${m} to trash`);
   let text = parts.length > 0 ? `${parts.join(', ')}.` : 'No notes were changed.';
   if (done.failed.length > 0) {
-    text += ` Could not restore ${quotedList(done.failed.map((f) => f.path))}: ${done.failed[0]!.reason}.`;
+    text += ` Could not restore ${quotedList(done.failed.map((f) => f.path))}: ${done.failed[0].reason}.`;
   }
   return `AI Terminal: ${text} ${undoHint(done.undo, now)}`;
 }

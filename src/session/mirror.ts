@@ -104,9 +104,9 @@ export class TerminalMirror {
       allowProposedApi: true,
     });
     // Same character widths as the visible terminal (Korean, emoji), so cursor positions agree after a restore.
-    this.term.loadAddon(new Unicode11Addon() as unknown as Parameters<HeadlessTerminal['loadAddon']>[0]);
+    this.term.loadAddon(new Unicode11Addon());
     this.term.unicode.activeVersion = '11';
-    this.term.loadAddon(this.serializer as unknown as Parameters<HeadlessTerminal['loadAddon']>[0]);
+    this.term.loadAddon(this.serializer);
     this.extra = new ExtraModes(this.term);
   }
 

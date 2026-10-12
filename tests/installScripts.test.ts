@@ -2,7 +2,8 @@ import { mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync, mkdirSy
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { installSupportScripts, supportDir, supportScriptPath, SupportScripts } from '../src/support/installScripts';
+import { BUNDLED_SCRIPTS } from '../src/support/bundledScripts';
+import { installSupportScripts, supportDir, supportScriptPath, SupportScripts, writeBundledScripts } from '../src/support/installScripts';
 
 let pluginDir: string;
 let home: string;
@@ -73,5 +74,30 @@ describe('SupportScripts', () => {
     const results = await s.whenInstalled();
     expect(results.map((r) => r.status)).toEqual(['installed', 'installed']);
     expect(readFileSync(s.path('snapshot_hook.py'), 'utf8')).toBe('hook');
+  });
+});
+
+describe('writeBundledScripts', () => {
+  it('writes the helpers bundled in main.js into the plugin folder, then only what changed', async () => {
+    const dir = join(pluginDir, 'plugins', 'ai-terminal'); // created on demand
+    const first = await writeBundledScripts(dir);
+    expect(first.map((r) => [r.name, r.status])).toEqual(Object.keys(BUNDLED_SCRIPTS).map((n) => [n, 'installed']));
+    for (const [name, content] of Object.entries(BUNDLED_SCRIPTS)) {
+      expect(readFileSync(join(dir, name), 'utf8')).toBe(content);
+      expect(statSync(join(dir, name)).mode & 0o777).toBe(0o644);
+    }
+    expect((await writeBundledScripts(dir)).every((r) => r.status === 'unchanged')).toBe(true);
+    writeFileSync(join(dir, 'pty_bridge.py'), 'old version');
+    const third = await writeBundledScripts(dir);
+    expect(third.find((r) => r.name === 'pty_bridge.py')?.status).toBe('updated');
+    expect(readFileSync(join(dir, 'pty_bridge.py'), 'utf8')).toBe(BUNDLED_SCRIPTS['pty_bridge.py']);
+  });
+
+  it('reports failures instead of rejecting', async () => {
+    const file = join(pluginDir, 'not-a-dir');
+    writeFileSync(file, 'x');
+    const results = await writeBundledScripts(join(file, 'sub'), { 'a.py': 'a' });
+    expect(results).toMatchObject([{ name: 'a.py', status: 'failed' }]);
+    expect((await writeBundledScripts(pluginDir, { '../a.py': 'a' }))[0]).toMatchObject({ status: 'failed', error: expect.stringMatching(/Invalid/) });
   });
 });

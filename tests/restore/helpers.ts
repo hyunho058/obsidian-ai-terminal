@@ -221,7 +221,7 @@ export class FsVault extends Events {
 export function realSnapshots(vault: string, opts: { gitPath?: string; storePath?: string; turnedOn?: boolean } = {}) {
   const log = testLogger();
   const storePath = opts.storePath ?? join(tempDir('store-'), 'snap.git');
-  const store = new SnapshotStore({ vaultPath: vault, git: new GitRunner(opts.gitPath ?? REAL_GIT), storePath, log });
+  const store = new SnapshotStore({ vaultPath: vault, git: new GitRunner(opts.gitPath ?? REAL_GIT), storePath, log, configDir: '.obsidian' });
   const service = new SnapshotService({
     store,
     isTurnedOn: () => opts.turnedOn ?? true,

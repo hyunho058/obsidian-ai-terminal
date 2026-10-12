@@ -143,15 +143,14 @@ export function readObsidianTheme(el: HTMLElement): ITheme {
   const win = doc.defaultView;
   if (!win) return buildTheme(() => '', false);
   const style = win.getComputedStyle(el);
-  const probe = doc.createElement('div');
-  probe.style.display = 'none';
-  el.appendChild(probe);
+  const probe = el.createDiv();
+  probe.hide();
   try {
     const read: CssVarReader = (name) => {
       const raw = style.getPropertyValue(name).trim();
       if (!raw) return '';
-      probe.style.color = '';
-      probe.style.color = raw;
+      probe.setCssProps({ color: '' });
+      probe.setCssProps({ color: raw });
       const normalized = probe.style.color ? win.getComputedStyle(probe).color : '';
       return normalized || raw;
     };

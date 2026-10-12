@@ -106,6 +106,7 @@
 }
 
 .ai-terminal-restore .ai-terminal-restore-file {
+  display: block;
   padding: 2px 0;
   cursor: pointer;
 }

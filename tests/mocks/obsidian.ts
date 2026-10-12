@@ -208,6 +208,9 @@ export function installDomShims(): void {
   P.hide = function () {
     this.style.display = 'none';
   };
+  P.setCssProps = function (props: Record<string, string>) {
+    for (const [k, v] of Object.entries(props)) this.style.setProperty(k, v);
+  };
 }
 
 installDomShims();
@@ -726,7 +729,7 @@ export interface Command {
 
 export function createManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
   return {
-    id: 'obsidian-ai-terminal',
+    id: 'ai-terminal',
     name: 'AI Terminal',
     version: '0.1.0',
     minAppVersion: '1.8.0',

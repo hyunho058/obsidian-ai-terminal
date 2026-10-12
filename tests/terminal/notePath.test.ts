@@ -45,7 +45,7 @@ describe('notePathText', () => {
 describe('"Send note path to terminal" command', () => {
   async function setup() {
     h = await makeViewHarness();
-    const cmd = h.plugin.commands.find((c) => c.id === `obsidian-ai-terminal:${SEND_NOTE_PATH_COMMAND.id}`);
+    const cmd = h.plugin.commands.find((c) => c.id === `ai-terminal:${SEND_NOTE_PATH_COMMAND.id}`);
     if (!cmd) throw new Error('command not registered');
     return { harness: h, run: () => cmd.callback!() };
   }
@@ -70,7 +70,7 @@ describe('"Send note path to terminal" command', () => {
   it('is registered with its palette name', async () => {
     const { harness } = await setup();
     const cmd = harness.plugin.commands.find((c) => c.name === 'Send note path to terminal');
-    expect(cmd?.id).toBe('obsidian-ai-terminal:send-note-path');
+    expect(cmd?.id).toBe('ai-terminal:send-note-path');
     expect(cmd?.icon).toBe('at-sign');
   });
 

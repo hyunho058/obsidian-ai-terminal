@@ -68,7 +68,7 @@ function truncate(text: string, max: number): string {
 /** The window of the active leaf (popout windows have their own document), or null. */
 export function activeLeafWindow(app: App): Window | null {
   const view = app.workspace.getActiveViewOfType(View);
-  const el = view?.containerEl as HTMLElement | undefined;
+  const el = view?.containerEl;
   return el?.ownerDocument?.defaultView ?? null;
 }
 
@@ -181,7 +181,7 @@ export class RestoreModal extends Modal {
   }
 
   private appendRows(listEl: HTMLElement, upTo: number): void {
-    for (; this.shown < upTo; this.shown++) this.renderRow(listEl, this.snapshotList[this.shown]!);
+    for (; this.shown < upTo; this.shown++) this.renderRow(listEl, this.snapshotList[this.shown]);
   }
 
   private renderRow(listEl: HTMLElement, info: SnapshotInfo): void {
@@ -189,7 +189,6 @@ export class RestoreModal extends Modal {
       cls: ['setting-item', 'ai-terminal-restore-snapshot'],
       attr: { tabindex: '0', role: 'button', 'data-commit': info.commit },
     });
-    row.style.cursor = 'pointer';
     const infoEl = row.createDiv({ cls: 'setting-item-info' });
     infoEl.createDiv({ cls: 'setting-item-name', text: `${formatTimestamp(new Date(info.time))} · ${aiLabel(info)}` });
     const what = snapshotWhat(info);
@@ -306,7 +305,6 @@ export class RestoreModal extends Modal {
       section.createEl('h4', { text: `${GROUP_TITLES[status]} (${group.length})` });
       for (const f of group) {
         const label = section.createEl('label', { cls: 'ai-terminal-restore-file', attr: { 'data-status': f.status } });
-        label.style.display = 'block';
         const box = label.createEl('input', { type: 'checkbox', attr: { 'data-path': f.path } });
         box.checked = this.ticked.has(f.path);
         box.addEventListener('change', () => {

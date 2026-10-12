@@ -272,5 +272,5 @@ interface IdeModuleData {
 
 function ideData(ctx: PluginContext): IdeModuleData {
   const data = ctx.settings.moduleData.ide;
-  return data && typeof data === 'object' && !Array.isArray(data) ? (data as IdeModuleData) : {};
+  return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
 }

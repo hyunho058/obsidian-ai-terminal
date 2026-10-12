@@ -20,10 +20,10 @@ describe('commands and ribbon (D1–D3, R1.1–R1.4)', () => {
     h = await makeViewHarness();
     const commands = h.plugin.commands.map((c) => [c.id, c.name]);
     expect(commands).toEqual([
-      ['obsidian-ai-terminal:open-claude-code', 'Open Claude Code'],
-      ['obsidian-ai-terminal:open-antigravity', 'Open Antigravity'],
-      ['obsidian-ai-terminal:open-shell', 'Open shell'],
-      ['obsidian-ai-terminal:send-note-path', 'Send note path to terminal'],
+      ['ai-terminal:open-claude-code', 'Open Claude Code'],
+      ['ai-terminal:open-antigravity', 'Open Antigravity'],
+      ['ai-terminal:open-shell', 'Open shell'],
+      ['ai-terminal:send-note-path', 'Send note path to terminal'],
     ]);
     expect(OPEN_COMMANDS.map((c) => c.profile)).toEqual(['claude', 'agy', 'shell']);
   });

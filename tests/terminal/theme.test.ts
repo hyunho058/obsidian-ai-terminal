@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import '../mocks/obsidian'; // Obsidian's HTMLElement helpers (createDiv, hide, setCssProps)
 import { createLinkActivator, isWebUrl, openInBrowser } from '../../src/terminal/links';
 import { buildFixedTheme, buildTheme, isDarkTheme, readObsidianTheme } from '../../src/terminal/theme';
 

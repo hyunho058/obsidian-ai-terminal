@@ -5,12 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { assertNoNativeModules, buildOptions, copyStaticFiles, EXTERNALS, findSupportScripts, isSupportScript } from '../esbuild.config.mjs';
 import { findTestDirs } from '../scripts/test-python.mjs';
+import { BUNDLED_SCRIPTS } from '../src/support/bundledScripts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 function fakeProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'proj-'));
-  writeFileSync(join(root, 'manifest.json'), JSON.stringify({ id: 'obsidian-ai-terminal', isDesktopOnly: true }));
+  writeFileSync(join(root, 'manifest.json'), JSON.stringify({ id: 'ai-terminal', isDesktopOnly: true }));
   writeFileSync(join(root, 'styles.css'), '.ai-terminal-container{}');
   mkdirSync(join(root, 'node_modules', '@xterm', 'xterm', 'css'), { recursive: true });
   writeFileSync(join(root, 'node_modules', '@xterm', 'xterm', 'css', 'xterm.css'), '.xterm{}');
@@ -54,42 +55,32 @@ describe('the real project (R16.1)', () => {
     expect(findSupportScripts().map((f: string) => basename(f)).sort()).toEqual(SUPPORT_SCRIPTS);
   });
 
-  it('the static-copy step of `npm run build` writes manifest.json, styles.css and the three scripts', () => {
+  it('bundles every support script into main.js with its exact content (Obsidian installs only three files)', () => {
+    expect(Object.keys(BUNDLED_SCRIPTS).sort()).toEqual(SUPPORT_SCRIPTS);
+    for (const file of findSupportScripts()) expect(BUNDLED_SCRIPTS[basename(file)]).toBe(readFileSync(file, 'utf8'));
+  });
+
+  it('the static-copy step of `npm run build` writes manifest.json and styles.css', () => {
     const out = mkdtempSync(join(tmpdir(), 'dist-'));
-    expect(copyStaticFiles({ outDir: out }).sort()).toEqual(SUPPORT_SCRIPTS);
-    expect(readdirSync(out).sort()).toEqual(['manifest.json', ...SUPPORT_SCRIPTS, 'styles.css'].sort());
+    copyStaticFiles({ outDir: out });
+    expect(readdirSync(out).sort()).toEqual(['manifest.json', 'styles.css']);
     expect(readFileSync(join(out, 'manifest.json'), 'utf8')).toBe(readFileSync(join(ROOT, 'manifest.json'), 'utf8'));
     const css = readFileSync(join(out, 'styles.css'), 'utf8');
     expect(css).toContain('.xterm');
     expect(css).toContain(readFileSync(join(ROOT, 'styles.css'), 'utf8'));
-    for (const name of SUPPORT_SCRIPTS) {
-      const source = findSupportScripts().find((f: string) => basename(f) === name)!;
-      expect(readFileSync(join(out, name), 'utf8')).toBe(readFileSync(source, 'utf8'));
-    }
     expect(() => assertNoNativeModules(out)).not.toThrow();
   });
 });
 
 describe('copyStaticFiles', () => {
-  it('copies manifest, xterm.css + styles.css and support scripts flat; works with no scripts', () => {
+  it('copies manifest and xterm.css + styles.css, never the .py helpers', () => {
     const root = fakeProject();
     const out = join(root, 'dist');
-    expect(copyStaticFiles({ root, outDir: out })).toEqual([]);
+    write(root, 'src/pty/pty_bridge.py', 'pty');
+    copyStaticFiles({ root, outDir: out });
     expect(readdirSync(out).sort()).toEqual(['manifest.json', 'styles.css']);
     const css = readFileSync(join(out, 'styles.css'), 'utf8');
     expect(css.indexOf('.xterm{}')).toBeLessThan(css.indexOf('.ai-terminal-container{}'));
-
-    write(root, 'src/pty/pty_bridge.py', 'pty');
-    write(root, 'src/snapshot/snapshot_hook.py', 'hook');
-    expect(copyStaticFiles({ root, outDir: out })).toEqual(['pty_bridge.py', 'snapshot_hook.py']);
-    expect(readFileSync(join(out, 'snapshot_hook.py'), 'utf8')).toBe('hook');
-  });
-
-  it('fails on two scripts with the same file name', () => {
-    const root = fakeProject();
-    write(root, 'src/a/util.py');
-    write(root, 'src/b/util.py');
-    expect(() => copyStaticFiles({ root, outDir: join(root, 'dist') })).toThrow(/Two support scripts/);
   });
 });
 
@@ -110,6 +101,7 @@ describe('native module guard (R2.10)', () => {
     expect(o.format).toBe('cjs');
     expect(o.platform).toBe('node');
     expect(o.target).toBe('es2022');
+    expect(o.loader).toEqual({ '.py': 'text' });
     for (const ext of ['obsidian', 'electron', '@codemirror/*', '@lezer/*', 'child_process', 'node:fs']) expect(EXTERNALS).toContain(ext);
   });
 });
@@ -117,15 +109,29 @@ describe('native module guard (R2.10)', () => {
 describe('manifest (R2.10)', () => {
   it('is desktop-only with the expected id', () => {
     const m = JSON.parse(readFileSync(join(ROOT, 'manifest.json'), 'utf8'));
-    expect(m).toMatchObject({ id: 'obsidian-ai-terminal', name: 'AI Terminal', isDesktopOnly: true, minAppVersion: '1.8.0', version: '0.1.0' });
+    expect(m).toMatchObject({ id: 'ai-terminal', name: 'AI Terminal', isDesktopOnly: true, minAppVersion: '1.8.0' });
     expect(m.description).toBeTruthy();
     expect(m.author).toBeTruthy();
   });
 
-  it('dist/ (if built) holds exactly main.js, manifest.json, styles.css and the three scripts — no native modules (R16.1)', () => {
+  it('follows the Community directory rules for id, name, version and description', () => {
+    const m = JSON.parse(readFileSync(join(ROOT, 'manifest.json'), 'utf8'));
+    expect(m.id).toMatch(/^[a-z-]+$/);
+    expect(m.id).not.toMatch(/obsidian/i);
+    expect(m.id).not.toMatch(/plugin$/);
+    expect(m.name).not.toMatch(/obsi|sidian|plugin/i);
+    expect(m.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(m.description.length).toBeLessThanOrEqual(250);
+    expect(m.description).toMatch(/\.$/);
+    expect(m.description).not.toMatch(/^This is a plugin/i);
+    expect(m.fundingUrl).toBeUndefined();
+  });
+
+  it('dist/ (if built) holds exactly main.js, manifest.json and styles.css, with the helpers inside main.js (R16.1)', () => {
     const dist = join(ROOT, 'dist');
     if (!existsSync(join(dist, 'main.js'))) return;
-    expect(readdirSync(dist).sort()).toEqual(['main.js', 'manifest.json', 'mcp_shim.py', 'pty_bridge.py', 'snapshot_hook.py', 'styles.css']);
+    expect(readdirSync(dist).sort()).toEqual(['main.js', 'manifest.json', 'styles.css']);
+    expect(readFileSync(join(dist, 'main.js'), 'utf8')).toContain('pty_bridge.py');
     expect(() => assertNoNativeModules(dist)).not.toThrow();
   });
 });

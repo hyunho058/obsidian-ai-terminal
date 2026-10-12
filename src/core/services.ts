@@ -15,9 +15,10 @@ import type { Disposer } from './types';
  * Suggested keys: `shellEnv`, `pty` (T2) · `sessions` (T3) · `bridgeState`,
  * `bridgeServer` (T6) · `ide` (T7) · `agyBridge` (T8) · `snapshots` (T9).
  */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- filled in by each module through declaration merging
 export interface ServiceMap {}
 
-export type ServiceKey = keyof ServiceMap & string;
+export type ServiceKey = keyof ServiceMap;
 
 export class ServiceTimeoutError extends Error {
   constructor(readonly key: string, readonly timeoutMs: number) {

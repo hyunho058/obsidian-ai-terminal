@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { promises as fs, existsSync } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { PLUGIN_ID } from '../core/constants';
+import { DATA_DIR_NAME } from '../core/constants';
 import type { Logger } from '../util/log';
 import { GitRunner, GitSpawnError, gitFailureReason, runningLockingGit, whenLockingGitIdle, type GitResult } from './git';
 import { commitMessage, parseCommit } from './messages';
@@ -10,8 +10,8 @@ import type { ChangedFile, SnapshotInfo, SnapshotMeta } from './types';
 
 /** Note types that are snapshotted (D31); attachments are not. */
 export const TRACKED_PATTERNS: readonly string[] = ['*.md', '*.canvas', '*.base'];
-/** Folders never snapshotted (plus the vault's config folder if it is not `.obsidian`). */
-export const EXCLUDED_DIRS: readonly string[] = ['.obsidian', '.trash'];
+/** Folders never snapshotted, besides the vault's config folder (`app.vault.configDir`). */
+export const EXCLUDED_DIRS: readonly string[] = ['.trash'];
 const VAULT_PATH_KEY = 'obsidian-ai-terminal.vaultpath';
 const DEFAULT_LIST_LIMIT = 500;
 
@@ -40,11 +40,11 @@ export class SnapshotError extends Error {
 /** `~/.local/share/obsidian-ai-terminal/snapshots/<sha256(vaultPath)[:16]>.git` (D32). */
 export function storePathFor(vaultPath: string, home: string = os.homedir()): string {
   const hash = createHash('sha256').update(vaultPath).digest('hex').slice(0, 16);
-  return path.join(home, '.local', 'share', PLUGIN_ID, 'snapshots', `${hash}.git`);
+  return path.join(home, '.local', 'share', DATA_DIR_NAME, 'snapshots', `${hash}.git`);
 }
 
 /** Pathspecs of the snapshotted notes (R12.12): note types anywhere, minus config / trash folders. */
-export function snapshotPathspecs(configDir = '.obsidian'): string[] {
+export function snapshotPathspecs(configDir: string): string[] {
   const dirs = new Set(EXCLUDED_DIRS);
   const cfg = configDir.replace(/^\/+|\/+$/g, '');
   if (cfg) dirs.add(cfg);
@@ -63,7 +63,7 @@ export interface SnapshotStoreOptions {
   /** Defaults to `storePathFor(vaultPath)`. */
   storePath?: string;
   /** `app.vault.configDir`. */
-  configDir?: string;
+  configDir: string;
   log?: Logger;
 }
 

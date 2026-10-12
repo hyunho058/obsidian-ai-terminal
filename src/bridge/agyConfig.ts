@@ -28,6 +28,8 @@ export interface AgyListEntry {
   command: string;
 }
 
+// Terminal escape sequences (colors, titles) in agy's output — matching control characters is the point.
+// eslint-disable-next-line no-control-regex -- the escape sequences are what this strips
 const ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g;
 
 /**
@@ -41,10 +43,10 @@ export function parseMcpList(stdout: string): AgyListEntry[] | null {
     .split(/\r?\n/)
     .filter((l) => l.trim() !== '');
   if (lines.length === 0) return null;
-  if (lines.length === 1 && /^no mcp servers configured/i.test(lines[0]!.trim())) return [];
+  if (lines.length === 1 && /^no mcp servers configured/i.test(lines[0].trim())) return [];
   const headerAt = lines.findIndex((l) => /^\s*NAME\s+TYPE\s+STATUS\s+COMMAND/.test(l));
   if (headerAt < 0) return null;
-  const header = lines[headerAt]!;
+  const header = lines[headerAt];
   // Column offsets in code points (Go's tabwriter counts runes).
   const offset = (label: string): number => Array.from(header.slice(0, header.indexOf(label))).length;
   const [typeAt, statusAt, commandAt] = [offset('TYPE'), offset('STATUS'), offset('COMMAND')];
@@ -68,7 +70,7 @@ export function parseMcpList(stdout: string): AgyListEntry[] | null {
       continue;
     }
     const m = /^(.+?)\s{2,}(\S+)\s{2,}(\S+)\s{2,}(.*)$/.exec(line.trim());
-    if (m) entries.push({ name: m[1]!, type: m[2]!, status: m[3]!, command: m[4]!.trim() });
+    if (m) entries.push({ name: m[1], type: m[2], status: m[3], command: m[4].trim() });
   }
   return entries;
 }

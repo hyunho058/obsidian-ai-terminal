@@ -134,7 +134,7 @@ export async function cleanStaleLockFiles(dir: string, isAlive: (pid: number) =>
 function parseLock(raw: string): Partial<Record<keyof IdeLockContent, unknown>> | null {
   try {
     const value: unknown = JSON.parse(raw);
-    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Partial<Record<keyof IdeLockContent, unknown>>) : null;
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
   } catch {
     return null;
   }

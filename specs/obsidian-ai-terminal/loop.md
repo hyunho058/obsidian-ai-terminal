@@ -30,7 +30,7 @@ Prove that the implemented plugin satisfies every sub-requirement in `spec.md` `
 | Metric | Threshold | How measured |
 |--------|-----------|--------------|
 | Sub-requirements **missing or contradicted** by the code | **0** of 123 | Traceability matrix built by separate checker subagents (code + tests vs each Given/When/Then); a deviation listed as approved below does not count as contradicted |
-| Sub-requirements **accounted for** (automated test OR an item in README "First run checklist") | **100%** (123/123) | Same matrix |
+| Sub-requirements **accounted for** (automated test OR an item in the "First run checklist" in docs/development.md) | **100%** (123/123) | Same matrix |
 | Sub-requirements with an **automated test** that exercises the Given/When/Then | **≥ 70%** (≥ 87/123) | Same matrix (GUI-only items like real drag/popout, real IME, real macOS permission are expected to be checklist-only) |
 | Full TS suite stability | **3/3** consecutive green runs of `npx vitest run` | run 3× |
 | `dist/main.js` size | **≤ 4 MB** (now 2.8 MB) | `stat -f %z dist/main.js` |
@@ -107,7 +107,7 @@ The loop exits only when **every** gate above passes and the Evidence Report is 
 - review (2026-10-09): environmentally stale since the plugin is installed and running in the user's Obsidian — these paths now exist legitimately. Interim check used instead: modification times / listings of the real paths are identical before and after the test commands. Needs the user to re-activate (e.g. run only while Obsidian is closed) or retire.
 - note: zsh aborts on a glob that matches nothing (`~/.claude/ide/*.lock` with an empty folder), which failed the real-state check in iteration 1; gate commands must use `find`, never bare globs.
 
-### L2 — Every GUI-only requirement needs a README checklist step
+### L2 — Every GUI-only requirement needs a First run checklist step (docs/development.md)
 - cause: gate-fail
 - source: human-approved
 - form: gate1-command

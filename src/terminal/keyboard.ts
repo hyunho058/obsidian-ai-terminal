@@ -299,6 +299,8 @@ interface ElectronClipboard {
 
 function electronClipboard(): ElectronClipboard | null {
   try {
+    // Obsidian desktop only (isDesktopOnly). Loaded lazily so a missing module falls back to the web clipboard.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- the synchronous clipboard keeps paste order exact
     const electron = require('electron') as { clipboard?: ElectronClipboard } | undefined;
     const clipboard = electron?.clipboard;
     return clipboard && typeof clipboard.readText === 'function' && typeof clipboard.writeText === 'function' ? clipboard : null;

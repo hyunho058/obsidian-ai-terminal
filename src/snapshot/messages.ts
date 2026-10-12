@@ -26,6 +26,7 @@ export function formatTimestamp(date: Date): string {
 }
 
 // C0/C1 controls and the Unicode line / paragraph separators.
+// eslint-disable-next-line no-control-regex -- removing control characters is the point
 const CONTROL_CHARS = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+', 'g');
 
 /** One line: control characters and line breaks become spaces, runs of whitespace collapse; secrets are redacted. */
