@@ -14,15 +14,17 @@ Needs Node.js 22 or newer, plus everything listed under "What you need" in the R
    ```
 
    Use the path of your own vault instead of `~/Documents/Notes`.
-   The script copies `dist/` to `<vault>/.obsidian/plugins/obsidian-ai-terminal/`. Your plugin settings are kept.
+   The script copies `dist/` to `<vault>/.obsidian/plugins/ai-terminal/`. Your plugin settings are kept.
+   If the folder of the plugin's first id (`plugins/obsidian-ai-terminal/`) is there, the script copies its settings
+   over once and tells you to delete that folder.
 
 2. If you see **"Operation not permitted"**, macOS blocks your terminal app from the vault folder. Do one of these:
    - Open System Settings › Privacy & Security › **Files and Folders**. Find your terminal app (Terminal, iTerm …)
      and turn on the folder of your vault (for example "Documents"). Or add the terminal app under
      **Full Disk Access**. Then run the command again.
-   - Or copy the files by hand in Finder. Copy everything in `dist/` (`main.js`, `manifest.json`, `styles.css`,
-     `pty_bridge.py`, `mcp_shim.py`, `snapshot_hook.py`) into `<vault>/.obsidian/plugins/obsidian-ai-terminal/`.
-     Create the folder if it does not exist. Press Cmd+Shift+. in Finder to see the hidden `.obsidian` folder.
+   - Or copy the files by hand in Finder. Copy the three files in `dist/` (`main.js`, `manifest.json`, `styles.css`)
+     into `<vault>/.obsidian/plugins/ai-terminal/`. Create the folder if it does not exist. Press Cmd+Shift+. in
+     Finder to see the hidden `.obsidian` folder.
 
 3. In Obsidian, open Settings › **Community plugins**. Turn off **Restricted mode**. Then turn on **AI Terminal**.
 
@@ -108,7 +110,7 @@ You need a test note, for example `X.md` with a few lines of text.
 
 ```sh
 npm install
-npm run build        # → dist/: main.js, manifest.json, styles.css and the Python helper scripts
+npm run build        # → dist/: main.js, manifest.json, styles.css (the Python helpers are inside main.js)
 npm run dev          # rebuild dist/ on every change
 npm test             # vitest + Python unittest suites (Python 3.9 and your python3)
 npm run typecheck
@@ -116,8 +118,32 @@ npm run typecheck
 
 - `src/main.ts` wires the feature modules (`src/*/index.ts`, `*Module.ts`) through the shared extension points in
   `src/core/` (services, spawn contributors, keyboard hooks, bridge routes, session events, ready gate).
-- Every `src/**/*.py` that is not a test (`test_*.py`) or inside a `tests/` / `fixtures/` folder is copied flat into `dist/`.
+- Obsidian installs only `main.js`, `manifest.json` and `styles.css`. So the Python helpers (every `src/**/*.py` that
+  is not a test or inside a `tests/` / `fixtures/` folder) are bundled into `main.js` as text through
+  `src/support/bundledScripts.ts`, and written into the plugin folder on load. `tests/build.test.ts` fails when a
+  helper is missing from that list.
 - Tests never touch your real home folder: vitest and the Python runner use a temporary `HOME`.
 - `tests/security/leaks.test.ts` boots the whole plugin and checks that no token appears in logs, Notices, panels,
   command lines, commit messages, settings or files (R15.1). Secrets must only be logged through `src/util/log.ts`.
 - The design spec is `specs/obsidian-ai-terminal/spec.md`.
+
+## Releasing
+
+The plugin is listed in the [Obsidian Community directory](https://community.obsidian.md). Obsidian scans every
+release automatically (developer policies, code quality, known vulnerabilities, malware).
+
+1. Set the new version (`x.y.z`, no `v`) in `manifest.json` and `package.json`, and commit it to `main`.
+   The directory reads `manifest.json` from the default branch.
+2. Run `npm test` and `npm run build`.
+3. Create a GitHub release. Its tag must be exactly the version in `manifest.json` (for example `0.1.0`).
+   Attach `dist/main.js`, `dist/manifest.json` and `dist/styles.css`.
+4. Check the result of the automated review in the developer dashboard on community.obsidian.md.
+
+Rules worth knowing (see the [submission requirements](https://docs.obsidian.md/community-directory/submission-requirements-for-plugins)
+and [developer policies](https://docs.obsidian.md/Community+directory/Developer+policies)):
+
+- The id (`ai-terminal`) must never contain "obsidian". Command ids must not contain the plugin id.
+- The README section "What the plugin uses and accesses" must stay true: network use and files outside the vault
+  have to be disclosed there.
+- Obsidian's lint rules (`eslint-plugin-obsidianmd`) must pass without errors. Disabling an `obsidianmd/*` rule with
+  a comment is not allowed; other `eslint-disable` comments need a description after `--`.

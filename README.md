@@ -42,17 +42,22 @@ To check that the AI is ready, type `claude --version` (or `agy --version`) in T
 
 ## Install
 
-AI Terminal is not in Obsidian's community plugin list yet, so you install it by hand.
+**From Obsidian** (once AI Terminal is in the community plugin list):
 
-1. Open the [Releases page](https://github.com/hyunho058/obsidian-ai-terminal/releases/latest) and download
-   `obsidian-ai-terminal.zip`. Double-click it to unzip. You get a folder named `obsidian-ai-terminal`.
+1. Open **Settings › Community plugins**. If **Restricted mode** is on, turn it off.
+2. Click **Browse**, search for **AI Terminal**, click **Install**, then **Enable**.
+
+**By hand** (before that, or to pick a version):
+
+1. Open the [latest release](https://github.com/hyunho058/obsidian-ai-terminal/releases/latest) and download
+   `main.js`, `manifest.json` and `styles.css`.
 2. In Obsidian, open **Settings › Community plugins**. If **Restricted mode** is on, turn it off.
 3. Next to **Installed plugins**, click the **folder icon**. Finder opens the plugins folder of your vault.
-4. Drag the `obsidian-ai-terminal` folder into it.
+4. In that folder, make a new folder named `ai-terminal` and put the three files in it.
 5. Back in Obsidian, click the **reload icon** next to **Installed plugins**. Then turn on **AI Terminal**.
 
 If step 3 does not open a folder: open your vault folder in Finder and press Cmd+Shift+. to show hidden folders.
-Open `.obsidian`, create a folder named `plugins` if there is none, and drag `obsidian-ai-terminal` into it.
+Open `.obsidian`, and make a folder named `plugins` in it if there is none.
 
 ## First start
 
@@ -122,8 +127,37 @@ They stay on your Mac, outside the vault.
 
 For more, see [Troubleshooting](docs/user-guide.md#troubleshooting) in the user guide.
 
+## What the plugin uses and accesses
+
+Obsidian asks plugins to say this clearly. In short: no payment, no ads, no telemetry, and the plugin itself never
+connects to the internet.
+
+- **Account.** The plugin is free and needs no account. The AI tools need their own: Claude Code needs an
+  Anthropic account, Antigravity needs a Google account.
+- **Network.** The plugin runs a small server that only your own Mac can reach (`127.0.0.1`, locked with a key). The
+  AI tools in its panels use it to read the open note and the selection. The AI tools themselves connect to their
+  companies (Anthropic, Google) and send what you ask and the notes they read — the same as when you use them in
+  Terminal.
+- **Files outside your vault.** The plugin needs these to run the AI tools and to keep the undo history out of
+  your vault:
+  - `~/.config/obsidian-ai-terminal/`: small helper scripts that the AI tools run (they come with the plugin, nothing
+    is downloaded) and a lock file.
+  - `~/.local/share/obsidian-ai-terminal/`: the snapshot history for [undo](#undo-ai-changes).
+  - `~/.claude/`: while "Claude Code IDE connection" is on, a connection file in `~/.claude/ide/` lets Claude Code
+    see your selection. The plugin also reads Claude Code's settings (to give a tip about diffs) and its conversation
+    files (to continue a conversation after a restart).
+  - Antigravity: while "Antigravity bridge" is on, the plugin adds an `obsidian` entry to Antigravity
+    (`agy mcp add`) and the rule `mcp(obsidian/*)` to `~/.gemini/antigravity-cli/settings.json`, so Antigravity
+    can use the note tools without asking each time.
+  - Your shell settings (such as `~/.zshrc`) are read by starting your login shell, so the AI tools find the same
+    programs as in Terminal.
+
 ## More
 
 - [User guide](docs/user-guide.md): every feature and setting, what the AI can see, where snapshots are saved,
   known limitations.
-- [Development](docs/development.md): build from source, the in-app test checklist, running the tests.
+- [Development](docs/development.md): build from source, the in-app test checklist, running the tests, releasing.
+
+## License
+
+[MIT](LICENSE)

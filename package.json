@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Obsidian desktop plugin: a terminal panel for Claude Code, Antigravity and a shell, with an Obsidian bridge.",
+  "license": "MIT",
   "main": "dist/main.js",
   "scripts": {
     "build": "node esbuild.config.mjs production",
