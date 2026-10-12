@@ -22,7 +22,7 @@ Click into a note, then run **"Send note path to terminal"** (Cmd+P; you can giv
 It types the note's path into a terminal panel and puts the cursor there. It does not press Enter, so you can add
 your question.
 
-- Claude Code and Antigravity get an @ mention: `@IELTS/Grammar/note.md`, or `@"IELTS/Grammar/my note.md"` when the
+- Claude Code and Antigravity get an @ mention: `@Projects/Plans/note.md`, or `@"Projects/Plans/my note.md"` when the
   path has spaces. Claude Code reads the note right away. Antigravity shows the path and reads the note when it
   needs it.
 - Shell gets the path, in quotes when it has spaces.

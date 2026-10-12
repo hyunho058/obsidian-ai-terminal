@@ -10,10 +10,10 @@ Needs Node.js 22 or newer, plus everything listed under "What you need" in the R
 1. Build the plugin and copy it into your vault:
 
    ```sh
-   npm install && npm run build && npm run install-plugin -- ~/Documents/Notes
+   npm install && npm run build && npm run install-plugin -- ~/Documents/MyVault
    ```
 
-   Use the path of your own vault instead of `~/Documents/Notes`.
+   Use the path of your own vault instead of `~/Documents/MyVault`.
    The script copies `dist/` to `<vault>/.obsidian/plugins/ai-terminal/`. Your plugin settings are kept.
    If the folder of the plugin's first id (`plugins/obsidian-ai-terminal/`) is there, the script copies its settings
    over once and tells you to delete that folder.

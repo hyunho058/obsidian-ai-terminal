@@ -12,7 +12,7 @@ with your notes. You can ask things like:
 
 - "Summarize the note I have open."
 - "Explain the text I selected."
-- "Find my notes about IELTS and make a list with links to them."
+- "Find all my notes on a topic and make a list with links to them."
 - "Fix the spelling in this note."
 
 What you get:
