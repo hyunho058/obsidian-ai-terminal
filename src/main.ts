@@ -11,6 +11,7 @@ import { createSessionModule } from './session/index';
 import { AiTerminalSettingTab, SettingsStore, type AiTerminalSettings } from './settings';
 import { createRestoreModule } from './snapshot/restoreModule';
 import { createSnapshotModule } from './snapshot/index';
+import { writeBundledScripts } from './support/installScripts';
 import { createCloseFlowModule } from './terminal/closeFlowModule';
 import { createKeyboardModule } from './terminal/keyboardModule';
 import { createTerminalModule } from './terminal/index';
@@ -59,12 +60,17 @@ export default class AiTerminalPlugin extends Plugin {
     store.load(await this.loadData());
     this.settings = store.settings;
 
+    const pluginDir = resolvePluginDir(vaultPath, this.app.vault.configDir, this.manifest);
+    for (const r of await writeBundledScripts(pluginDir)) {
+      if (r.status === 'failed') log.error(`could not write ${r.path}`, r.error ?? '');
+    }
+
     this.runtime = new PluginRuntime({
       app: this.app,
       plugin: this,
       settingsStore: store,
       vaultPath,
-      pluginDir: resolvePluginDir(vaultPath, this.app.vault.configDir, this.manifest),
+      pluginDir,
       log,
     });
     this.addSettingTab(new AiTerminalSettingTab(this.app, this, store));
@@ -77,7 +83,7 @@ export default class AiTerminalPlugin extends Plugin {
   }
 }
 
-/** Absolute plugin folder: `manifest.dir` is vault-relative (e.g. `.obsidian/plugins/obsidian-ai-terminal`). */
+/** Absolute plugin folder: `manifest.dir` is vault-relative (e.g. `.obsidian/plugins/ai-terminal`). */
 export function resolvePluginDir(vaultPath: string, configDir: string, manifest: PluginManifest): string {
   const rel = manifest.dir ?? path.join(configDir, 'plugins', manifest.id);
   return path.resolve(vaultPath, rel);

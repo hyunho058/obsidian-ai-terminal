@@ -726,7 +726,7 @@ export interface Command {
 
 export function createManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
   return {
-    id: 'obsidian-ai-terminal',
+    id: 'ai-terminal',
     name: 'AI Terminal',
     version: '0.1.0',
     minAppVersion: '1.8.0',

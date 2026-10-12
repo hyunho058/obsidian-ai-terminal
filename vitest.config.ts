@@ -2,6 +2,13 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // `.py` imports are the file's text, like esbuild's `.py` text loader (src/support/bundledScripts.ts).
+  plugins: [
+    {
+      name: 'python-as-text',
+      transform: (code, id) => (id.endsWith('.py') ? { code: `export default ${JSON.stringify(code)};`, map: null } : undefined),
+    },
+  ],
   resolve: {
     alias: {
       obsidian: fileURLToPath(new URL('./tests/mocks/obsidian.ts', import.meta.url)),

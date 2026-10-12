@@ -248,7 +248,7 @@ beforeAll(async () => {
   mkdirSync(join(vault, 'Notes'), { recursive: true });
   writeFileSync(join(vault, 'Notes', 'X.md'), 'one\ntwo\nthree\n');
   writeFileSync(join(vault, 'Notes', 'Y.md'), 'links to [[X]]\n');
-  const pluginDir = join(vault, '.obsidian', 'plugins', 'obsidian-ai-terminal');
+  const pluginDir = join(vault, '.obsidian', 'plugins', 'ai-terminal');
   mkdirSync(pluginDir, { recursive: true });
   for (const f of ['pty/pty_bridge.py', 'bridge/mcp_shim.py', 'snapshot/snapshot_hook.py']) copyFileSync(join(SRC, f), join(pluginDir, f.split('/')[1]!));
 
@@ -545,7 +545,7 @@ describe('R15.1: tokens never leak', () => {
 
   it('restore dialog: the snapshot list and the file step show no token', async () => {
     const commands = (plugin as unknown as { commands: Array<{ id: string; callback?: () => unknown }> }).commands;
-    const command = commands.find((c) => c.id === 'obsidian-ai-terminal:restore-notes')!;
+    const command = commands.find((c) => c.id === 'ai-terminal:restore-notes')!;
     command.callback!();
     const modal = Modal.open.at(-1)!;
     const content = modal.contentEl as HTMLElement;

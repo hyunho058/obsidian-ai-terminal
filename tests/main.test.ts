@@ -1,9 +1,10 @@
 import type { App } from 'obsidian';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import AiTerminalPlugin, { resolvePluginDir } from '../src/main';
+import { BUNDLED_SCRIPTS } from '../src/support/bundledScripts';
 import { createManifest, createMockApp, Notice, type PluginManifest } from './mocks/obsidian';
 
 function newPlugin(vaultPath = mkdtempSync(join(tmpdir(), 'vault-')), manifest: PluginManifest = createManifest()) {
@@ -23,7 +24,9 @@ describe('AiTerminalPlugin', () => {
     expect(ctx!.settings.placement).toBe('right-sidebar');
     expect(plugin.settings).toBe(ctx!.settings);
     expect(ctx!.vaultPath).toBe(vaultPath);
-    expect(ctx!.pluginDir).toBe(join(vaultPath, '.obsidian', 'plugins', 'obsidian-ai-terminal'));
+    expect(ctx!.pluginDir).toBe(join(vaultPath, '.obsidian', 'plugins', 'ai-terminal'));
+    // Obsidian installs only main.js, manifest.json and styles.css: the Python helpers come out of main.js.
+    for (const [name, content] of Object.entries(BUNDLED_SCRIPTS)) expect(readFileSync(join(ctx!.pluginDir, name), 'utf8')).toBe(content);
     expect((plugin as unknown as { settingTabs: unknown[] }).settingTabs).toHaveLength(1);
     await ctx!.ready;
     expect(ctx!.isReady()).toBe(true);
@@ -52,6 +55,6 @@ describe('AiTerminalPlugin', () => {
 
   it('resolvePluginDir prefers manifest.dir', () => {
     expect(resolvePluginDir('/v', '.obsidian', { ...createManifest(), dir: '.obsidian/plugins/custom' } as never)).toBe('/v/.obsidian/plugins/custom');
-    expect(resolvePluginDir('/v', '.cfg', createManifest() as never)).toBe('/v/.cfg/plugins/obsidian-ai-terminal');
+    expect(resolvePluginDir('/v', '.cfg', createManifest() as never)).toBe('/v/.cfg/plugins/ai-terminal');
   });
 });

@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { promises as fs, existsSync } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { PLUGIN_ID } from '../core/constants';
+import { DATA_DIR_NAME } from '../core/constants';
 import type { Logger } from '../util/log';
 import { GitRunner, GitSpawnError, gitFailureReason, runningLockingGit, whenLockingGitIdle, type GitResult } from './git';
 import { commitMessage, parseCommit } from './messages';
@@ -40,7 +40,7 @@ export class SnapshotError extends Error {
 /** `~/.local/share/obsidian-ai-terminal/snapshots/<sha256(vaultPath)[:16]>.git` (D32). */
 export function storePathFor(vaultPath: string, home: string = os.homedir()): string {
   const hash = createHash('sha256').update(vaultPath).digest('hex').slice(0, 16);
-  return path.join(home, '.local', 'share', PLUGIN_ID, 'snapshots', `${hash}.git`);
+  return path.join(home, '.local', 'share', DATA_DIR_NAME, 'snapshots', `${hash}.git`);
 }
 
 /** Pathspecs of the snapshotted notes (R12.12): note types anywhere, minus config / trash folders. */

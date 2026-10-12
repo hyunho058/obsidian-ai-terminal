@@ -1,12 +1,13 @@
 import { promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { PLUGIN_ID } from '../core/constants';
+import { DATA_DIR_NAME } from '../core/constants';
 import type { Logger } from '../util/log';
+import { BUNDLED_SCRIPTS } from './bundledScripts';
 
 /** `~/.config/obsidian-ai-terminal` (HOME from `os.homedir()`, so tests can override it). */
 export function supportDir(): string {
-  return path.join(os.homedir(), '.config', PLUGIN_ID);
+  return path.join(os.homedir(), '.config', DATA_DIR_NAME);
 }
 
 /** Stable absolute path of an installed support script, e.g. `~/.config/obsidian-ai-terminal/mcp_shim.py`. */
@@ -42,29 +43,58 @@ export async function installSupportScripts(pluginDir: string, names: Iterable<s
       continue;
     }
     try {
-      const current = await fs.readFile(dest).catch(() => null);
-      if (current && current.equals(source)) {
-        results.push({ name, path: dest, status: 'unchanged' });
-        continue;
-      }
       if (!dirReady) {
         await fs.mkdir(dir, { recursive: true, mode: 0o755 });
         dirReady = true;
       }
-      const tmp = `${dest}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
-      try {
-        await fs.writeFile(tmp, source, { mode: 0o644 });
-        await fs.rename(tmp, dest);
-      } catch (err) {
-        await fs.rm(tmp, { force: true }).catch(() => {});
-        throw err;
-      }
-      results.push({ name, path: dest, status: current ? 'updated' : 'installed' });
+      results.push({ name, path: dest, status: await writeIfChanged(dest, source) });
     } catch (err) {
       results.push({ name, path: dest, status: 'failed', error: errorMessage(err) });
     }
   }
   return results;
+}
+
+/**
+ * Writes the Python helpers bundled in main.js into the plugin folder, only where the content differs.
+ * Obsidian installs just main.js, manifest.json and styles.css from a release, so this runs on every load before
+ * anything reads `<pluginDir>/<name>`. Never rejects; failures are in the results.
+ */
+export async function writeBundledScripts(
+  pluginDir: string,
+  scripts: Readonly<Record<string, string>> = BUNDLED_SCRIPTS,
+): Promise<InstallResult[]> {
+  const results: InstallResult[] = [];
+  try {
+    await fs.mkdir(pluginDir, { recursive: true });
+  } catch (err) {
+    return Object.keys(scripts).map((name) => ({ name, path: path.join(pluginDir, name), status: 'failed', error: errorMessage(err) }));
+  }
+  for (const [name, content] of Object.entries(scripts)) {
+    const dest = path.join(pluginDir, name);
+    try {
+      assertScriptName(name);
+      results.push({ name, path: dest, status: await writeIfChanged(dest, Buffer.from(content, 'utf8')) });
+    } catch (err) {
+      results.push({ name, path: dest, status: 'failed', error: errorMessage(err) });
+    }
+  }
+  return results;
+}
+
+/** Atomic write (temp file + rename, mode 0644), skipped when `dest` already holds `content`. */
+async function writeIfChanged(dest: string, content: Buffer): Promise<'installed' | 'updated' | 'unchanged'> {
+  const current = await fs.readFile(dest).catch(() => null);
+  if (current && current.equals(content)) return 'unchanged';
+  const tmp = `${dest}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  try {
+    await fs.writeFile(tmp, content, { mode: 0o644 });
+    await fs.rename(tmp, dest);
+  } catch (err) {
+    await fs.rm(tmp, { force: true }).catch(() => {});
+    throw err;
+  }
+  return current ? 'updated' : 'installed';
 }
 
 /**

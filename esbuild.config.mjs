@@ -1,4 +1,5 @@
-// Build: `node esbuild.config.mjs production` → dist/ (main.js, manifest.json, styles.css, *.py).
+// Build: `node esbuild.config.mjs production` → dist/ (main.js, manifest.json, styles.css). The Python helpers are
+// bundled into main.js as text: Obsidian installs only these three files.
 // Dev:   `node esbuild.config.mjs` → same output, rebuilt on change.
 import esbuild from 'esbuild';
 import fs from 'node:fs';
@@ -27,7 +28,8 @@ export const EXTERNALS = [
 /** Directories under src/ whose .py files are never shipped. */
 const EXCLUDED_DIRS = new Set(['node_modules', '__pycache__', 'tests', 'test', 'fixtures', 'testdata']);
 
-/** A shipped support script: any `.py` under src/ that is not a test file or inside a test/fixture dir. */
+/** A shipped support script: any `.py` under src/ that is not a test file or inside a test/fixture dir (all of them
+ * must be in src/support/bundledScripts.ts — tests/build.test.ts checks). */
 export function isSupportScript(file) {
   const base = path.basename(file);
   return base.endsWith('.py') && !base.startsWith('test_') && !base.endsWith('_test.py') && base !== 'conftest.py';
@@ -49,8 +51,8 @@ export function findSupportScripts(srcDir = SRC_DIR) {
   return found.sort();
 }
 
-/** Copies manifest.json, styles.css (xterm.css + ours) and every support script (flat) into `outDir`. */
-export function copyStaticFiles({ root = ROOT, outDir = OUT_DIR, srcDir = path.join(root, 'src') } = {}) {
+/** Copies manifest.json and styles.css (xterm.css + ours) into `outDir`. */
+export function copyStaticFiles({ root = ROOT, outDir = OUT_DIR } = {}) {
   fs.mkdirSync(outDir, { recursive: true });
   fs.copyFileSync(path.join(root, 'manifest.json'), path.join(outDir, 'manifest.json'));
 
@@ -59,16 +61,6 @@ export function copyStaticFiles({ root = ROOT, outDir = OUT_DIR, srcDir = path.j
   if (fs.existsSync(xtermCss)) parts.push(`/* @xterm/xterm/css/xterm.css */\n${fs.readFileSync(xtermCss, 'utf8')}`);
   parts.push(fs.readFileSync(path.join(root, 'styles.css'), 'utf8'));
   fs.writeFileSync(path.join(outDir, 'styles.css'), parts.join('\n'));
-
-  const scripts = findSupportScripts(srcDir);
-  const byName = new Map();
-  for (const file of scripts) {
-    const name = path.basename(file);
-    if (byName.has(name)) throw new Error(`Two support scripts would both be dist/${name}: ${byName.get(name)} and ${file}`);
-    byName.set(name, file);
-  }
-  for (const [name, file] of byName) fs.copyFileSync(file, path.join(outDir, name));
-  return [...byName.keys()];
 }
 
 /** Fails if the output contains a native module (R2.10). */
@@ -109,7 +101,8 @@ export function buildOptions(prod) {
     platform: 'node',
     target: 'es2022',
     external: EXTERNALS,
-    banner: { js: '/* AI Terminal (obsidian-ai-terminal) — bundled with esbuild. */' },
+    loader: { '.py': 'text' },
+    banner: { js: '/* AI Terminal (ai-terminal) — bundled with esbuild. */' },
     sourcemap: prod ? false : 'inline',
     treeShaking: true,
     minify: false,
@@ -123,16 +116,16 @@ async function main() {
   if (prod) {
     fs.rmSync(OUT_DIR, { recursive: true, force: true });
     await esbuild.build(buildOptions(true));
-    const scripts = copyStaticFiles();
+    copyStaticFiles();
     assertNoNativeModules();
-    console.log(`dist/: main.js, manifest.json, styles.css${scripts.length ? `, ${scripts.join(', ')}` : ''}`);
+    console.log('dist/: main.js, manifest.json, styles.css');
     return;
   }
 
   const copy = () => {
     try {
-      const scripts = copyStaticFiles();
-      console.log(`[dev] copied manifest.json, styles.css${scripts.length ? `, ${scripts.join(', ')}` : ''}`);
+      copyStaticFiles();
+      console.log('[dev] copied manifest.json, styles.css');
     } catch (err) {
       console.error('[dev] copy failed:', err.message);
     }
@@ -143,15 +136,12 @@ async function main() {
     plugins: [...options.plugins, { name: 'copy-static', setup: (b) => b.onEnd(copy) }],
   });
   await ctx.watch();
-  // esbuild only watches bundled files; support scripts and styles are watched here.
+  // esbuild watches the bundled files (the .py helpers too); the static files are watched here.
   let pending = null;
   const schedule = () => {
     clearTimeout(pending);
     pending = setTimeout(copy, 100);
   };
-  fs.watch(SRC_DIR, { recursive: true }, (_event, file) => {
-    if (file && file.endsWith('.py')) schedule();
-  });
   for (const f of ['styles.css', 'manifest.json']) fs.watch(path.join(ROOT, f), schedule);
   if (fs.existsSync(XTERM_CSS)) fs.watch(XTERM_CSS, schedule);
 }

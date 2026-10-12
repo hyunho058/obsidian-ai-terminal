@@ -24,7 +24,7 @@ afterEach(() => {
   Notice.clear();
 });
 
-const COMMAND = `obsidian-ai-terminal:${RESTORE_COMMAND_ID}`;
+const COMMAND = `ai-terminal:${RESTORE_COMMAND_ID}`;
 
 async function load(modules: FeatureModule[], data: unknown = { snapshots: { enabled: true } }) {
   const rt = await startRuntime({ vault: makeVault({ 'note.md': 'hello' }), modules, data });
