@@ -4,24 +4,16 @@ Use AI assistants like **Claude Code** and **Antigravity** inside Obsidian, righ
 
 ## What is this?
 
-Claude Code (from Anthropic) and Antigravity (from Google) are AI assistants that can read and edit files on your
-computer. Normally you use them in the Terminal app, a window where you type text.
+AI Terminal adds terminal panels to Obsidian for two AI coding assistants, Claude Code (Anthropic) and
+Antigravity (Google), and for a normal shell. The assistants start in the vault folder, so they can read and edit
+the notes directly.
 
-This plugin puts that window inside Obsidian as a panel. The AI starts in your vault folder, so it works directly
-with your notes. You can ask things like:
+Features:
 
-- "Summarize the note I have open."
-- "Explain the text I selected."
-- "Find all my notes on a topic and make a list with links to them."
-- "Fix the spelling in this note."
-
-What you get:
-
-- **AI panels in Obsidian.** Open Claude Code, Antigravity or a normal terminal as a panel, like any other tab.
-- **The AI knows what you are looking at.** It can see the note you have open and the text you selected.
-- **Changes show up at once.** When the AI edits a note, you see the change in Obsidian.
-- **Undo for AI changes.** Before each message you send, the plugin saves a copy of your notes. If the AI breaks
-  something, you can go back.
+- **AI panels in Obsidian.** Claude Code, Antigravity or a shell open as panels, like any other tab.
+- **Context from the editor.** The AI can see the open note and the selected text.
+- **Live updates.** Notes the AI edits change in Obsidian right away.
+- **Undo for AI changes.** A copy of the notes is saved before each message to the AI, so changes can be undone.
 
 ## What you need
 
