@@ -2,31 +2,26 @@
 
 Use AI assistants like **Claude Code** and **Antigravity** inside Obsidian, right next to your notes.
 
+> **Note**: **macOS only** (Obsidian desktop v1.8+). Windows, Linux, and mobile devices (iOS/Android) are not supported.
+
 ## What is this?
 
-Claude Code (from Anthropic) and Antigravity (from Google) are AI assistants that can read and edit files on your
-computer. Normally you use them in the Terminal app, a window where you type text.
+AI Terminal adds terminal panels to Obsidian for two AI coding assistants, Claude Code (Anthropic) and
+Antigravity (Google), and for a normal shell. The assistants start in the vault folder, so they can read and edit
+the notes directly.
 
-This plugin puts that window inside Obsidian as a panel. The AI starts in your vault folder, so it works directly
-with your notes. You can ask things like:
+Features:
 
-- "Summarize the note I have open."
-- "Explain the text I selected."
-- "Find all my notes on a topic and make a list with links to them."
-- "Fix the spelling in this note."
-
-What you get:
-
-- **AI panels in Obsidian.** Open Claude Code, Antigravity or a normal terminal as a panel, like any other tab.
-- **The AI knows what you are looking at.** It can see the note you have open and the text you selected.
-- **Changes show up at once.** When the AI edits a note, you see the change in Obsidian.
-- **Undo for AI changes.** Before each message you send, the plugin saves a copy of your notes. If the AI breaks
-  something, you can go back.
+- **AI panels in Obsidian.** Claude Code, Antigravity or a shell open as panels, like any other tab.
+- **Context from the editor.** The AI can see the open note and the selected text.
+- **Live updates.** Notes the AI edits change in Obsidian right away.
+- **Undo for AI changes.** A copy of the notes is saved before each message to the AI, so changes can be undone.
 
 ## What you need
 
-- A **Mac** with the **Obsidian desktop app**, version 1.8 or newer. Windows, Linux and phones are not supported.
-- **Claude Code** or the **Antigravity CLI** (or both), and an account for it:
+- A **Mac** with the **Obsidian desktop app**, version 1.8 or newer. Windows, Linux and mobile devices (iOS/Android) are not supported.
+- **Claude Code** or the **Antigravity CLI** (or both), and an account for it. Claude Code needs a paid Claude plan
+  (Pro or Max) or Anthropic API credits:
   - Claude Code: [install guide](https://code.claude.com/docs/en/setup)
   - Antigravity CLI: [install guide](https://antigravity.google/product/antigravity-cli)
 - **Apple's command line tools.** The plugin needs Python and git, which come with them. Open the **Terminal** app,
@@ -38,7 +33,8 @@ What you get:
 
   Then follow the window that opens. If it says the tools are already installed, you are done.
 
-To check that the AI is ready, type `claude --version` (or `agy --version`) in Terminal. You should see a version number.
+To check that the AI is ready, type `claude --version` (or `agy --version`) in Terminal and press Enter. You should
+see a version number.
 
 ## Install
 
@@ -77,13 +73,13 @@ Open `.obsidian`, and make a folder named `plugins` in it if there is none.
 | Open an AI panel | Click the terminal icon on the left, or press Cmd+P and type "AI Terminal" |
 | Ask about a note | Click into the note, then ask in the panel: "summarize the note I have open" |
 | Ask about part of a note | Select the text, click into the panel and ask: "explain the selected text" |
-| Point the AI at a note | Click into the note, press Cmd+P and run "Send note path to terminal". The note's name appears in the panel. Add your question and press Enter |
+| Point the AI at a note | Click into the note, press Cmd+P and run "Send note path to terminal". The note's path appears in the panel. Add your question and press Enter |
 | Start a new line without sending (Claude) | Shift+Enter |
 | Copy / paste | Cmd+C / Cmd+V |
 | Undo what the AI changed | See [Undo AI changes](#undo-ai-changes) |
 
 Panels work like normal Obsidian tabs: you can drag them, split them or move them to another window, and the AI
-keeps running. When you restart Obsidian, the panels come back and Claude continues its conversation.
+keeps running. When you restart Obsidian, the panels come back (Claude resumes each panel's conversation; Antigravity resumes its latest session).
 
 ### Undo AI changes
 
@@ -116,8 +112,9 @@ They stay on your Mac, outside the vault.
 
 - **"Command not found: claude"**: Obsidian cannot find the AI program. In Terminal, run `which claude`
   (or `which agy`). Copy the path it prints, for example `/Users/you/.local/bin/claude`, into
-  Settings › AI Terminal › "Claude Code command" (or "Antigravity command").
-- **"Python 3 not found"**: install Apple's command line tools (see [What you need](#what-you-need)).
+  Settings › AI Terminal › Profiles › "Claude Code command" (or "Antigravity command").
+- **"Python 3 not found"**: install Apple's command line tools (see [What you need](#what-you-need)). If you already
+  have Python 3, put its path (from `which python3`) into Settings › AI Terminal › Terminal › "Python path".
 - **macOS blocked access** ("Operation not permitted"): open System Settings › Privacy & Security ›
   Files and Folders › Obsidian and turn on the folder of your vault. Then open a new panel.
 - **A message says "Reload the plugin"**: in Settings › Community plugins, turn **AI Terminal** off, then on again.
@@ -133,7 +130,7 @@ Obsidian asks plugins to say this clearly. In short: no payment, no ads, no tele
 connects to the internet.
 
 - **Account.** The plugin is free and needs no account. The AI tools need their own: Claude Code needs an
-  Anthropic account, Antigravity needs a Google account.
+  Anthropic account with a paid plan or API credits, Antigravity needs a Google account.
 - **Network.** The plugin runs a small server that only your own Mac can reach (`127.0.0.1`, locked with a key). The
   AI tools in its panels use it to read the open note and the selection. The AI tools themselves connect to their
   companies (Anthropic, Google) and send what you ask and the notes they read — the same as when you use them in
