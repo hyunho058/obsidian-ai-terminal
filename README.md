@@ -2,6 +2,8 @@
 
 Use AI assistants like **Claude Code** and **Antigravity** inside Obsidian, right next to your notes.
 
+> **Note**: **macOS only** (Obsidian desktop v1.8+). Windows, Linux, and mobile devices (iOS/Android) are not supported.
+
 ## What is this?
 
 AI Terminal adds terminal panels to Obsidian for two AI coding assistants, Claude Code (Anthropic) and
@@ -17,7 +19,7 @@ Features:
 
 ## What you need
 
-- A **Mac** with the **Obsidian desktop app**, version 1.8 or newer. Windows, Linux and phones are not supported.
+- A **Mac** with the **Obsidian desktop app**, version 1.8 or newer. Windows, Linux and mobile devices (iOS/Android) are not supported.
 - **Claude Code** or the **Antigravity CLI** (or both), and an account for it. Claude Code needs a paid Claude plan
   (Pro or Max) or Anthropic API credits:
   - Claude Code: [install guide](https://code.claude.com/docs/en/setup)
@@ -71,13 +73,13 @@ Open `.obsidian`, and make a folder named `plugins` in it if there is none.
 | Open an AI panel | Click the terminal icon on the left, or press Cmd+P and type "AI Terminal" |
 | Ask about a note | Click into the note, then ask in the panel: "summarize the note I have open" |
 | Ask about part of a note | Select the text, click into the panel and ask: "explain the selected text" |
-| Point the AI at a note | Click into the note, press Cmd+P and run "Send note path to terminal". The note's name appears in the panel. Add your question and press Enter |
+| Point the AI at a note | Click into the note, press Cmd+P and run "Send note path to terminal". The note's path appears in the panel. Add your question and press Enter |
 | Start a new line without sending (Claude) | Shift+Enter |
 | Copy / paste | Cmd+C / Cmd+V |
 | Undo what the AI changed | See [Undo AI changes](#undo-ai-changes) |
 
 Panels work like normal Obsidian tabs: you can drag them, split them or move them to another window, and the AI
-keeps running. When you restart Obsidian, the panels come back and Claude continues its conversation.
+keeps running. When you restart Obsidian, the panels come back (Claude resumes each panel's conversation; Antigravity resumes its latest session).
 
 ### Undo AI changes
 
@@ -112,7 +114,7 @@ They stay on your Mac, outside the vault.
   (or `which agy`). Copy the path it prints, for example `/Users/you/.local/bin/claude`, into
   Settings › AI Terminal › Profiles › "Claude Code command" (or "Antigravity command").
 - **"Python 3 not found"**: install Apple's command line tools (see [What you need](#what-you-need)). If you already
-  have Python 3, put its path (from `which python3`) into Settings › AI Terminal › "Python path".
+  have Python 3, put its path (from `which python3`) into Settings › AI Terminal › Terminal › "Python path".
 - **macOS blocked access** ("Operation not permitted"): open System Settings › Privacy & Security ›
   Files and Folders › Obsidian and turn on the folder of your vault. Then open a new panel.
 - **A message says "Reload the plugin"**: in Settings › Community plugins, turn **AI Terminal** off, then on again.
