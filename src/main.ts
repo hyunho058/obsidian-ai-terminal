@@ -6,6 +6,7 @@ import { createBridgeModule } from './bridge/index';
 import { PluginRuntime, type FeatureModule, type PluginContext } from './core';
 import { createEnvModule } from './env/index';
 import { createPtyModule } from './pty/index';
+import { registerProfileIcons } from './session/icons';
 import { createResumeModule } from './session/resumeModule';
 import { createSessionModule } from './session/index';
 import { AiTerminalSettingTab, SettingsStore, type AiTerminalSettings } from './settings';
@@ -47,6 +48,7 @@ export default class AiTerminalPlugin extends Plugin {
 
   async onload(): Promise<void> {
     const log = createLogger();
+    registerProfileIcons();
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
       notice('AI Terminal works only in the Obsidian desktop app.');

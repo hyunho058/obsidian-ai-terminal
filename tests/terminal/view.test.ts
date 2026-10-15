@@ -125,7 +125,7 @@ describe('TerminalView', () => {
     const { view } = await openRunning(harness, 'claude');
     expect(view.getViewType()).toBe(TERMINAL_VIEW_TYPE);
     expect(view.getDisplayText()).toBe('Claude Code');
-    expect(view.getIcon()).toBe('sparkles');
+    expect(view.getIcon()).toBe('ai-terminal-claude');
     const state = view.getState();
     expect(state).toEqual({ profile: 'claude', panelId: view.panelId, sessionId: 'uuid-1' });
     expect(state.panelId).toMatch(/^[0-9a-f-]{36}$/);
