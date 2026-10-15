@@ -1,11 +1,12 @@
 import { randomUUID } from 'crypto';
 import { PROFILE_IDS, type ProfileId } from '../core/constants';
 import { profileCommand, type AiTerminalSettings } from '../settings';
+import { AGY_ICON, CLAUDE_ICON } from './icons';
 
-/** Lucide icon per profile (tab header, ribbon menu). */
+/** Icon per profile (tab header, ribbon menu): custom pixel art for the agents (see icons.ts), Lucide for the shell. */
 export const PROFILE_ICONS: Readonly<Record<ProfileId, string>> = {
-  claude: 'sparkles',
-  agy: 'orbit',
+  claude: CLAUDE_ICON,
+  agy: AGY_ICON,
   shell: 'terminal',
 };
 
