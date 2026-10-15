@@ -1,6 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal, type ITheme } from '@xterm/xterm';
 import { ItemView, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import { PROFILE_LABELS, TERMINAL_VIEW_TYPE, type PluginContext, type ProfileId, type SessionState, type TerminalViewState } from '../core';
@@ -301,6 +302,7 @@ export class TerminalView extends ItemView {
       () => onBinary.dispose(),
     );
     term.open(hostEl);
+    this.loadWebgl(term);
     this.term = term;
     this.fitAddon = fitAddon;
     const RO = (this.window() as Window & { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
@@ -310,6 +312,21 @@ export class TerminalView extends ItemView {
       this.resizeObserver = observer;
     }
     this.scheduleFit();
+  }
+
+  /**
+   * The WebGL renderer draws block elements and box drawing (the CLIs' pixel-art logos) as seamless custom glyphs;
+   * the default DOM renderer uses the font, which leaves gaps between rows. Falls back to the DOM renderer when
+   * WebGL is unavailable or its context is lost.
+   */
+  private loadWebgl(term: Terminal): void {
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => webgl.dispose());
+      term.loadAddon(webgl);
+    } catch {
+      // No WebGL2: keep the DOM renderer.
+    }
   }
 
   private input(data: string | Uint8Array): void {
