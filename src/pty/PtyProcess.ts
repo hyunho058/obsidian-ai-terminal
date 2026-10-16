@@ -96,8 +96,8 @@ export class PtyProcess {
   private spawnError: Error | undefined;
   private execError: PtyExecError | undefined;
   private killReason: string | undefined;
-  private hardKillTimer: ReturnType<typeof setTimeout> | undefined;
-  private settleTimer: ReturnType<typeof setTimeout> | undefined;
+  private hardKillTimer: number | undefined;
+  private settleTimer: number | undefined;
   private openStreams = 2;
   private stderrBuf = '';
   private readonly stderrTail: string[] = [];
@@ -140,7 +140,7 @@ export class PtyProcess {
 
     this.child.once('exit', (code, signal) => {
       this.helperExit = { code, signal };
-      this.settleTimer = setTimeout(() => this.finish(), STDIO_SETTLE_MS);
+      this.settleTimer = window.setTimeout(() => this.finish(), STDIO_SETTLE_MS);
       this.maybeFinish();
     });
     this.child.on('error', (err) => {
@@ -216,7 +216,7 @@ export class PtyProcess {
     this.killReason = reason;
     this.log?.debug(`stopping ${this.command} (pid ${this.child.pid ?? '?'}): ${reason}`);
     this.child.stdin?.end();
-    this.hardKillTimer = setTimeout(() => this.hardKill(), this.hardKillAfterMs);
+    this.hardKillTimer = window.setTimeout(() => this.hardKill(), this.hardKillAfterMs);
   }
 
   private hardKill(): void {
@@ -282,8 +282,8 @@ export class PtyProcess {
 
   private finish(): void {
     if (this.exitInfo) return;
-    if (this.settleTimer) clearTimeout(this.settleTimer);
-    if (this.hardKillTimer) clearTimeout(this.hardKillTimer);
+    if (this.settleTimer) window.clearTimeout(this.settleTimer);
+    if (this.hardKillTimer) window.clearTimeout(this.hardKillTimer);
     if (this.stderrBuf) {
       this.handleStderrLine(this.stderrBuf);
       this.stderrBuf = '';

@@ -186,18 +186,18 @@ describe('AiTerminalSettingTab (R14.1, R14.2)', () => {
       'Font size',
       'Terminal colors',
       'Scrollback',
-      'Option key acts as Meta',
+      'Option key as meta key',
       'Bridge tools',
-      'Claude Code IDE connection',
+      'Claude IDE connection',
       'Antigravity bridge',
       'AI session snapshots',
     ]);
     expect((byName('Placement') as DropdownComponent).getValue()).toBe('right-sidebar');
     expect(Object.keys((byName('Placement') as DropdownComponent).options)).toEqual(['right-sidebar', 'new-tab', 'split-below']);
     expect((byName('Scrollback') as TextComponent).getValue()).toBe('10000');
-    expect((byName('Option key acts as Meta') as ToggleComponent).getValue()).toBe(true);
+    expect((byName('Option key as meta key') as ToggleComponent).getValue()).toBe(true);
     expect((byName('Bridge tools') as ToggleComponent).getValue()).toBe(true);
-    expect((byName('Claude Code IDE connection') as ToggleComponent).getValue()).toBe(true);
+    expect((byName('Claude IDE connection') as ToggleComponent).getValue()).toBe(true);
     expect((byName('Antigravity bridge') as ToggleComponent).getValue()).toBe(true);
     expect((byName('AI session snapshots') as DropdownComponent).getValue()).toBe('ask');
     expect((byName('Terminal colors') as DropdownComponent).getValue()).toBe('obsidian');
@@ -224,7 +224,7 @@ describe('AiTerminalSettingTab (R14.1, R14.2)', () => {
     await (byName('Placement') as DropdownComponent).simulateChange('new-tab');
     await (byName('Claude Code arguments') as TextComponent).simulateChange('--model sonnet');
     await (byName('Font size') as SliderComponent).simulateChange(16);
-    await (byName('Option key acts as Meta') as ToggleComponent).simulateChange(false);
+    await (byName('Option key as meta key') as ToggleComponent).simulateChange(false);
     await (byName('Scrollback') as TextComponent).simulateChange('abc'); // ignored
     await (byName('AI session snapshots') as DropdownComponent).simulateChange('off');
     await new Promise((r) => setTimeout(r, 0));

@@ -182,11 +182,11 @@ export class ShellEnv {
       const finish = (result: { env: Record<string, string> } | { error: string }): void => {
         if (done) return;
         done = true;
-        clearTimeout(timer);
+        window.clearTimeout(timer);
         if (this.child === child) this.child = undefined;
         resolve(result);
       };
-      const timer = setTimeout(() => {
+      const timer = window.setTimeout(() => {
         killGroup(child);
         finish({ error: `timed out after ${Math.round(timeoutMs / 100) / 10} s` });
       }, timeoutMs);

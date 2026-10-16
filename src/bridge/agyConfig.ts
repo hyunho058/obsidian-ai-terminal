@@ -139,19 +139,19 @@ export const runCommand: AgyRunner = (file, args, opts) =>
     child.stdout?.on('data', collect(out));
     child.stderr?.on('data', collect(err));
     let timedOut = false;
-    let killTimer: ReturnType<typeof setTimeout> | undefined;
-    const timer = setTimeout(() => {
+    let killTimer: number | undefined;
+    const timer = window.setTimeout(() => {
       timedOut = true;
       child.kill('SIGTERM');
-      killTimer = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS);
+      killTimer = window.setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS);
     }, opts.timeoutMs);
     let spawnError: string | undefined;
     child.on('error', (e) => {
       spawnError = e.message;
     });
     child.on('close', (code, signal) => {
-      clearTimeout(timer);
-      if (killTimer) clearTimeout(killTimer);
+      window.clearTimeout(timer);
+      if (killTimer) window.clearTimeout(killTimer);
       resolve({
         code,
         signal,
@@ -214,7 +214,7 @@ export class FileLock {
       if (this.tryCreate()) return true;
       if (this.breakIfStale()) continue;
       if (Date.now() >= deadline) return false;
-      await new Promise((r) => setTimeout(r, 75 + Math.floor(Math.random() * 75)));
+      await new Promise((r) => window.setTimeout(r, 75 + Math.floor(Math.random() * 75)));
     }
   }
 

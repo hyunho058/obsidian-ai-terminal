@@ -732,7 +732,7 @@ export function createManifest(overrides: Partial<PluginManifest> = {}): PluginM
     id: 'ai-terminal',
     name: 'AI Terminal',
     version: '0.1.0',
-    minAppVersion: '1.8.0',
+    minAppVersion: '1.13.0',
     description: 'test',
     author: 'test',
     isDesktopOnly: true,
@@ -941,7 +941,27 @@ export abstract class SettingTab {
   constructor(app: App) {
     this.app = app;
   }
-  abstract display(): void;
+  /** Like Obsidian 1.13: the default display() renders getSettingDefinitions() (group headings + `render` rows). */
+  getSettingDefinitions(): any[] {
+    return [];
+  }
+  display(): void {
+    this.containerEl.empty();
+    const renderItem = (item: any): void => {
+      if (item.type === 'group' || item.type === 'list') {
+        if (item.heading) new Setting(this.containerEl).setName(item.heading).setHeading();
+        for (const child of item.items ?? []) renderItem(child);
+        return;
+      }
+      const setting = new Setting(this.containerEl);
+      if (item.render) item.render(setting, undefined);
+      else {
+        setting.setName(item.name);
+        if (item.desc) setting.setDesc(item.desc);
+      }
+    };
+    for (const item of this.getSettingDefinitions()) renderItem(item);
+  }
   hide(): void {}
 }
 
@@ -1067,6 +1087,9 @@ export class ButtonComponent extends BaseComponent {
     return this;
   }
   setWarning(): this {
+    return this;
+  }
+  setDestructive(): this {
     return this;
   }
   setIcon(_i: string): this {

@@ -5,13 +5,13 @@ export interface Listenable {
 
 /** True if `target` is (or becomes) listening within `ms`; false if it is disabled, failed or too slow. */
 export async function listensWithin(target: Listenable, ms: number): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: number | undefined;
   const timeout = new Promise<boolean>((resolve) => {
-    timer = setTimeout(() => resolve(false), ms);
+    timer = window.setTimeout(() => resolve(false), ms);
   });
   try {
     return await Promise.race([target.whenListening().then(() => true, () => false), timeout]);
   } finally {
-    clearTimeout(timer);
+    window.clearTimeout(timer);
   }
 }

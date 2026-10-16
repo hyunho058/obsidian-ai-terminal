@@ -2,7 +2,7 @@
 
 Use AI assistants like **Claude Code** and **Antigravity** inside Obsidian, right next to your notes.
 
-> **Note**: **macOS only** (Obsidian desktop v1.8+). Windows, Linux, and mobile devices (iOS/Android) are not supported.
+> **Note**: **macOS only** (Obsidian desktop v1.13+). Windows, Linux, and mobile devices (iOS/Android) are not supported.
 
 ## What is this?
 
@@ -19,7 +19,7 @@ Features:
 
 ## What you need
 
-- A **Mac** with the **Obsidian desktop app**, version 1.8 or newer. Windows, Linux and mobile devices (iOS/Android) are not supported.
+- A **Mac** with the **Obsidian desktop app**, version 1.13 or newer. Windows, Linux and mobile devices (iOS/Android) are not supported.
 - **Claude Code** or the **Antigravity CLI** (or both), and an account for it. Claude Code needs a paid Claude plan
   (Pro or Max) or Anthropic API credits:
   - Claude Code: [install guide](https://code.claude.com/docs/en/setup)
@@ -140,7 +140,7 @@ connects to the internet.
   - `~/.config/obsidian-ai-terminal/`: small helper scripts that the AI tools run (they come with the plugin, nothing
     is downloaded) and a lock file.
   - `~/.local/share/obsidian-ai-terminal/`: the snapshot history for [undo](#undo-ai-changes).
-  - `~/.claude/`: while "Claude Code IDE connection" is on, a connection file in `~/.claude/ide/` lets Claude Code
+  - `~/.claude/`: while "Claude IDE connection" is on, a connection file in `~/.claude/ide/` lets Claude Code
     see your selection. The plugin also reads Claude Code's settings (to give a tip about diffs) and its conversation
     files (to continue a conversation after a restart).
   - Antigravity: while "Antigravity bridge" is on, the plugin adds an `obsidian` entry to Antigravity

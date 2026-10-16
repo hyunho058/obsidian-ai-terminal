@@ -53,7 +53,7 @@ The panel stays open and shows `[Process exited with code 0 — press Enter to r
 - **Korean and other input methods** work like in a normal text field. Enter finishes the syllable first.
 - **Shift+Enter**: a new line in Claude Code's input (the message is not sent).
 - **Option is Meta** (default): Option+← / Option+→ move by word; Claude Code's Meta shortcuts work.
-  To type special characters with Option (like Option+2 = ™), turn off Settings › AI Terminal › "Option key acts as Meta".
+  To type special characters with Option (like Option+2 = ™), turn off Settings › AI Terminal › "Option key as meta key".
 - **Cmd shortcuts in the terminal**:
 
   | Keys | Action |
@@ -96,7 +96,7 @@ In Claude Code the tools are called `mcp__obsidian__…`. Antigravity sees them 
 
 ### Automatic selection in Claude Code
 
-With "Claude Code IDE connection" on (default), Claude sees your selection without a tool call, like in VS Code.
+With "Claude IDE connection" on (default), Claude sees your selection without a tool call, like in VS Code.
 Select text in a note, click into the Claude panel, and ask. Claude shows "⧉ N lines selected".
 `/ide` in Claude shows the connection. A `claude` that you start in Terminal.app inside the vault can connect too (`/ide`).
 
@@ -185,7 +185,7 @@ move to Obsidian's trash (`.trash/`).
   When you turn a switch on again, panels that used it before work again without a restart. The port closes when
   you turn the plugin off or quit Obsidian. If both switches are off when the plugin starts, the server starts only
   when you turn one of them on.
-  The **Claude Code IDE connection** keeps its port in the same way. When you turn "Claude Code IDE connection" off,
+  The **Claude Code IDE connection** keeps its port in the same way. When you turn "Claude IDE connection" off,
   the plugin removes its lock file, disconnects Claude and refuses new connections, but it keeps the same port.
   When you turn it on again, the lock file comes back with the same port, and Claude panels that were already open
   can connect again (run `/ide` in Claude if it does not reconnect). If the switch is off when the plugin starts,
@@ -218,7 +218,7 @@ move to Obsidian's trash (`.trash/`).
   "Don't Allow": System Settings › Privacy & Security › Files and Folders › Obsidian → turn the folder on
   (or add Obsidian to Full Disk Access). Then restart the panel.
 - **Claude shows no selection** ("⧉ … lines selected" is missing). Check that Settings › AI Terminal ›
-  "Claude Code IDE connection" is on. Then start a new Claude panel. Select the text in a **note**, not in the
+  "Claude IDE connection" is on. Then start a new Claude panel. Select the text in a **note**, not in the
   terminal. Type `/ide` to see the connection. The `get_selection` tool works even without this connection.
 - **Claude shows "Opened changes in Obsidian ⧉" instead of the diff**: `/config` → Diff tool → terminal.
 - **agy shows no note name when you click a note**: this is normal. Ask about "the note I have open" and agy looks

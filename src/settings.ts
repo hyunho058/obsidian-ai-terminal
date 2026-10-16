@@ -1,4 +1,12 @@
-import { PluginSettingTab, Setting, type App, type Plugin } from 'obsidian';
+import {
+  PluginSettingTab,
+  type App,
+  type Plugin,
+  type Setting,
+  type SettingDefinition,
+  type SettingDefinitionGroup,
+  type SettingDefinitionItem,
+} from 'obsidian';
 import { PROFILE_IDS, PROFILE_LABELS, type ProfileId } from './core/constants';
 import type { Disposer } from './core/types';
 
@@ -219,164 +227,172 @@ export class AiTerminalSettingTab extends PluginSettingTab {
     super(app, plugin);
   }
 
-  display(): void {
-    const { containerEl } = this;
+  /** Rendered by Obsidian and indexed for its settings search (1.13+). Each row keeps its own imperative controls. */
+  getSettingDefinitions(): SettingDefinitionItem[] {
     const s = this.store.settings;
     const save = (): void => {
       void this.store.save();
     };
-    containerEl.empty();
 
-    new Setting(containerEl).setName('Panels').setHeading();
-    new Setting(containerEl)
-      .setName('Placement')
-      .setDesc('Where new terminal panels open.')
-      .addDropdown((dd) => {
-        for (const p of PLACEMENTS) dd.addOption(p, PLACEMENT_LABELS[p]);
-        dd.setValue(s.placement).onChange((v) => {
-          s.placement = v as Placement;
-          save();
-        });
-      });
-
-    new Setting(containerEl).setName('Profiles').setHeading();
-    for (const id of PROFILE_IDS) {
+    const profileRows = PROFILE_IDS.flatMap((id): SettingDefinition[] => {
       const label = PROFILE_LABELS[id];
-      new Setting(containerEl)
-        .setName(`${label} command`)
-        .setDesc(id === 'shell' ? 'Shell program (started as a login shell with -l).' : `Program started by "Open ${label}".`)
-        .addText((t) =>
-          t
-            .setPlaceholder(defaultSettings().profiles[id].command)
-            .setValue(s.profiles[id].command)
-            .onChange((v) => {
-              s.profiles[id].command = v.trim();
+      return [
+        row(`${label} command`, id === 'shell' ? 'Shell program (started as a login shell with -l).' : `Program started by "Open ${label}".`, (st) =>
+          st.addText((t) =>
+            t
+              .setPlaceholder(defaultSettings().profiles[id].command)
+              .setValue(s.profiles[id].command)
+              .onChange((v) => {
+                s.profiles[id].command = v.trim();
+                save();
+              }),
+          ),
+        ),
+        row(`${label} arguments`, 'Extra arguments, e.g. --model sonnet. Quotes work like in a shell.', (st) =>
+          st.addText((t) =>
+            t.setValue(s.profiles[id].args).onChange((v) => {
+              s.profiles[id].args = v;
               save();
             }),
-        );
-      new Setting(containerEl)
-        .setName(`${label} arguments`)
-        .setDesc('Extra arguments, e.g. --model sonnet. Quotes work like in a shell.')
-        .addText((t) =>
-          t.setValue(s.profiles[id].args).onChange((v) => {
-            s.profiles[id].args = v;
-            save();
-          }),
-        );
-    }
+          ),
+        ),
+      ];
+    });
 
-    new Setting(containerEl).setName('Terminal').setHeading();
-    new Setting(containerEl)
-      .setName('Python path')
-      .setDesc('Python 3 used by the terminal helper. Empty = python3 on your PATH, then /usr/bin/python3.')
-      .addText((t) =>
-        t
-          .setPlaceholder('Automatic')
-          .setValue(s.pythonPath)
-          .onChange((v) => {
-            s.pythonPath = v.trim();
-            save();
+    return [
+      group('Panels', [
+        row('Placement', 'Where new terminal panels open.', (st) =>
+          st.addDropdown((dd) => {
+            for (const p of PLACEMENTS) dd.addOption(p, PLACEMENT_LABELS[p]);
+            dd.setValue(s.placement).onChange((v) => {
+              s.placement = v as Placement;
+              save();
+            });
           }),
-      );
-    new Setting(containerEl)
-      .setName('Font family')
-      .setDesc('CSS font-family list for terminal text.')
-      .addText((t) =>
-        t
-          .setPlaceholder(DEFAULT_FONT_FAMILY)
-          .setValue(s.fontFamily)
-          .onChange((v) => {
-            s.fontFamily = v.trim() || DEFAULT_FONT_FAMILY;
-            save();
+        ),
+      ]),
+      group('Profiles', profileRows),
+      group('Terminal', [
+        row('Python path', 'Python 3 for the terminal helper. Leave empty to use the first python3 on your search path, then /usr/bin/python3.', (st) =>
+          st.addText((t) =>
+            t
+              .setPlaceholder('Automatic')
+              .setValue(s.pythonPath)
+              .onChange((v) => {
+                s.pythonPath = v.trim();
+                save();
+              }),
+          ),
+        ),
+        row('Font family', 'CSS font-family list for terminal text.', (st) =>
+          st.addText((t) =>
+            t
+              .setPlaceholder(DEFAULT_FONT_FAMILY)
+              .setValue(s.fontFamily)
+              .onChange((v) => {
+                s.fontFamily = v.trim() || DEFAULT_FONT_FAMILY;
+                save();
+              }),
+          ),
+        ),
+        row('Font size', undefined, (st) =>
+          st.addSlider((sl) =>
+            sl
+              .setLimits(8, 32, 1)
+              .setValue(s.fontSize)
+              .onChange((v) => {
+                s.fontSize = v;
+                save();
+              }),
+          ),
+        ),
+        row('Terminal colors', 'Background and text colors of the terminal panels.', (st) =>
+          st.addDropdown((dd) => {
+            for (const m of TERMINAL_COLOR_MODES) dd.addOption(m, TERMINAL_COLOR_LABELS[m]);
+            dd.setValue(s.terminalColors).onChange((v) => {
+              s.terminalColors = v as TerminalColors;
+              save();
+            });
           }),
-      );
-    new Setting(containerEl)
-      .setName('Font size')
-      .addSlider((sl) =>
-        sl
-          .setLimits(8, 32, 1)
-          .setValue(s.fontSize)
-          .setDynamicTooltip()
-          .onChange((v) => {
-            s.fontSize = v;
-            save();
+        ),
+        row('Scrollback', 'Lines kept above the screen (0–1000000).', (st) =>
+          st.addText((t) =>
+            t.setValue(String(s.scrollback)).onChange((v) => {
+              const n = Number(v.trim());
+              if (Number.isInteger(n) && n >= 0 && n <= 1_000_000) {
+                s.scrollback = n;
+                save();
+              }
+            }),
+          ),
+        ),
+        row('Option key as meta key', 'On: Option+key sends Meta (word movement, Claude Code shortcuts). Off: Option types special characters.', (st) =>
+          st.addToggle((tg) =>
+            tg.setValue(s.optionIsMeta).onChange((v) => {
+              s.optionIsMeta = v;
+              save();
+            }),
+          ),
+        ),
+      ]),
+      group('Obsidian bridge', [
+        row('Bridge tools', 'Let the AI read your open note, selection and links, and open notes. Snapshots keep working when this is off.', (st) =>
+          st.addToggle((tg) =>
+            tg.setValue(s.bridgeEnabled).onChange((v) => {
+              s.bridgeEnabled = v;
+              save();
+            }),
+          ),
+        ),
+        row('Claude IDE connection', 'Share the current selection with Claude automatically, as VS Code does.', (st) =>
+          st.addToggle((tg) =>
+            tg.setValue(s.ideConnectionEnabled).onChange((v) => {
+              s.ideConnectionEnabled = v;
+              save();
+            }),
+          ),
+        ),
+        row('Antigravity bridge', "Add the bridge to agy as a tool server (agy mcp add / remove) and allow its tools in agy's settings.", (st) =>
+          st.addToggle((tg) =>
+            tg.setValue(s.agyBridgeEnabled).onChange((v) => {
+              s.agyBridgeEnabled = v;
+              save();
+            }),
+          ),
+        ),
+      ]),
+      group('Snapshots', [
+        row('AI session snapshots', 'Save a restore point of your notes before every message to an AI (stored outside the vault).', (st) =>
+          st.addDropdown((dd) => {
+            dd.addOption('ask', 'Not asked yet');
+            dd.addOption('on', 'On');
+            dd.addOption('off', 'Off');
+            dd.setValue(toChoice(s.snapshots.enabled)).onChange((v) => {
+              s.snapshots.enabled = fromChoice(v as SnapshotChoice);
+              save();
+            });
           }),
-      );
-    new Setting(containerEl)
-      .setName('Terminal colors')
-      .setDesc('Background and text colors of the terminal panels.')
-      .addDropdown((dd) => {
-        for (const m of TERMINAL_COLOR_MODES) dd.addOption(m, TERMINAL_COLOR_LABELS[m]);
-        dd.setValue(s.terminalColors).onChange((v) => {
-          s.terminalColors = v as TerminalColors;
-          save();
-        });
-      });
-    new Setting(containerEl)
-      .setName('Scrollback')
-      .setDesc('Lines kept above the screen (0–1000000).')
-      .addText((t) =>
-        t.setValue(String(s.scrollback)).onChange((v) => {
-          const n = Number(v.trim());
-          if (Number.isInteger(n) && n >= 0 && n <= 1_000_000) {
-            s.scrollback = n;
-            save();
-          }
-        }),
-      );
-    new Setting(containerEl)
-      .setName('Option key acts as Meta')
-      .setDesc('On: Option+key sends Meta (word movement, Claude Code shortcuts). Off: Option types special characters.')
-      .addToggle((tg) =>
-        tg.setValue(s.optionIsMeta).onChange((v) => {
-          s.optionIsMeta = v;
-          save();
-        }),
-      );
-
-    new Setting(containerEl).setName('Obsidian bridge').setHeading();
-    new Setting(containerEl)
-      .setName('Bridge tools')
-      .setDesc('Let the AI read your open note, selection and links, and open notes. Snapshots keep working when this is off.')
-      .addToggle((tg) =>
-        tg.setValue(s.bridgeEnabled).onChange((v) => {
-          s.bridgeEnabled = v;
-          save();
-        }),
-      );
-    new Setting(containerEl)
-      .setName('Claude Code IDE connection')
-      .setDesc('Share the current selection with Claude Code automatically (like VS Code).')
-      .addToggle((tg) =>
-        tg.setValue(s.ideConnectionEnabled).onChange((v) => {
-          s.ideConnectionEnabled = v;
-          save();
-        }),
-      );
-    new Setting(containerEl)
-      .setName('Antigravity bridge')
-      .setDesc('Register the "obsidian" MCP server with agy (agy mcp add / remove) and allow its tools in agy\'s settings.')
-      .addToggle((tg) =>
-        tg.setValue(s.agyBridgeEnabled).onChange((v) => {
-          s.agyBridgeEnabled = v;
-          save();
-        }),
-      );
-
-    new Setting(containerEl).setName('Snapshots').setHeading();
-    new Setting(containerEl)
-      .setName('AI session snapshots')
-      .setDesc('Save a restore point of your notes before every message to an AI (stored outside the vault).')
-      .addDropdown((dd) => {
-        dd.addOption('ask', 'Not asked yet');
-        dd.addOption('on', 'On');
-        dd.addOption('off', 'Off');
-        dd.setValue(toChoice(s.snapshots.enabled)).onChange((v) => {
-          s.snapshots.enabled = fromChoice(v as SnapshotChoice);
-          save();
-        });
-      });
+        ),
+      ]),
+    ];
   }
+}
+
+function group(heading: string, items: SettingDefinition[]): SettingDefinitionGroup {
+  return { type: 'group', heading, items };
+}
+
+/** A searchable row (`name` / `desc`) whose controls are built imperatively by `build`. */
+function row(name: string, desc: string | undefined, build: (setting: Setting) => unknown): SettingDefinition {
+  return {
+    name,
+    desc,
+    render: (setting) => {
+      setting.setName(name);
+      if (desc) setting.setDesc(desc);
+      build(setting);
+    },
+  };
 }
 
 function toChoice(enabled: boolean | null): SnapshotChoice {

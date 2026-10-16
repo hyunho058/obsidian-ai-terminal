@@ -127,12 +127,12 @@ export async function runEnterInterceptors(
       return Promise.resolve();
     }
   });
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: number | undefined;
   const cap = new Promise<'cap'>((resolve) => {
-    timer = setTimeout(() => resolve('cap'), capMs);
+    timer = window.setTimeout(() => resolve('cap'), capMs);
   });
   const outcome = await Promise.race([Promise.all(runs).then(() => 'done' as const), cap]);
-  if (timer) clearTimeout(timer);
+  if (timer) window.clearTimeout(timer);
   if (outcome === 'cap') log.warn(`Enter interceptors still busy after ${capMs} ms — sending the Enter anyway`);
   return outcome;
 }

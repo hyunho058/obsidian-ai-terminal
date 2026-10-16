@@ -104,7 +104,7 @@ export class BridgeState implements BridgeStateService {
   /** True once some note editor was tracked (distinguishes "never focused" from "closed"). */
   private everTracked = false;
   private lastKey: string | null = null;
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  private timer: number | null = null;
   private disposed = false;
 
   constructor(opts: BridgeStateOptions) {
@@ -142,7 +142,7 @@ export class BridgeState implements BridgeStateService {
 
   dispose(): void {
     this.disposed = true;
-    if (this.timer) clearTimeout(this.timer);
+    if (this.timer) window.clearTimeout(this.timer);
     this.timer = null;
     for (const ref of this.refs.splice(0)) this.app.workspace.offref(ref);
     this.events.clear();
@@ -261,8 +261,8 @@ export class BridgeState implements BridgeStateService {
 
   private schedule(): void {
     if (this.disposed) return;
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => {
+    if (this.timer) window.clearTimeout(this.timer);
+    this.timer = window.setTimeout(() => {
       this.timer = null;
       this.flush();
     }, this.debounceMs);

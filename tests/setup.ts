@@ -18,6 +18,17 @@ process.env.XDG_DATA_HOME = join(home, '.local', 'share');
 process.env.XDG_STATE_HOME = join(home, '.local', 'state');
 process.env.XDG_CACHE_HOME = join(home, '.cache');
 
+// The plugin uses `window.setTimeout` & co. (popout-safe timers, Obsidian lint). Node-environment tests have no
+// window: give them a bare EventTarget whose timers forward to the globals at call time, so vi.useFakeTimers applies.
+if (typeof window === 'undefined') {
+  const g = globalThis as Record<string, unknown>;
+  const win = new EventTarget() as EventTarget & Record<string, unknown>;
+  for (const name of ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']) {
+    win[name] = (...args: unknown[]) => (g[name] as (...a: unknown[]) => unknown)(...args);
+  }
+  g.window = win;
+}
+
 if (homedir() !== home || tmpdir() !== tmp) throw new Error('tests/setup.ts: HOME / TMPDIR override did not take effect');
 
 afterAll(() => {

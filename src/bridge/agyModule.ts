@@ -59,7 +59,7 @@ export const ALLOW_RULE_NOTICE =
  */
 export function createAgyModule(options: AgyModuleOptions = {}): FeatureModule {
   let service: AgyBridgeService | undefined;
-  let recheckTimer: ReturnType<typeof setTimeout> | undefined;
+  let recheckTimer: number | undefined;
 
   return {
     id: 'agy',
@@ -84,7 +84,7 @@ export function createAgyModule(options: AgyModuleOptions = {}): FeatureModule {
         ...options.permissions,
       });
       ctx.onUnload(() => {
-        if (recheckTimer) clearTimeout(recheckTimer);
+        if (recheckTimer) window.clearTimeout(recheckTimer);
         config.dispose();
         permissions.dispose();
       });
@@ -182,15 +182,15 @@ export function createAgyModule(options: AgyModuleOptions = {}): FeatureModule {
       ctx.onSettingsChange((s, prev) => {
         if (ctx.unloading || !service) return;
         if (s.agyBridgeEnabled !== prev.agyBridgeEnabled) {
-          if (recheckTimer) clearTimeout(recheckTimer);
+          if (recheckTimer) window.clearTimeout(recheckTimer);
           if (s.agyBridgeEnabled) void service.ensure().then(noticeAfterToggleOn);
           else void remove().then(noticeAfterToggleOff);
           return;
         }
         const changed = s.pythonPath !== prev.pythonPath || s.profiles.agy.command !== prev.profiles.agy.command;
         if (s.agyBridgeEnabled && changed) {
-          if (recheckTimer) clearTimeout(recheckTimer);
-          recheckTimer = setTimeout(() => {
+          if (recheckTimer) window.clearTimeout(recheckTimer);
+          recheckTimer = window.setTimeout(() => {
             recheckTimer = undefined;
             if (!ctx.unloading && ctx.settings.agyBridgeEnabled) void service?.ensure();
           }, options.recheckDelayMs ?? RECHECK_DELAY_MS);
@@ -201,17 +201,17 @@ export function createAgyModule(options: AgyModuleOptions = {}): FeatureModule {
     async ready(ctx) {
       if (!ctx.settings.agyBridgeEnabled || !service) return;
       const limit = options.readyTimeoutMs ?? AGY_READY_TIMEOUT_MS;
-      let timer: ReturnType<typeof setTimeout> | undefined;
+      let timer: number | undefined;
       const timedOut = new Promise<'timeout'>((resolve) => {
-        timer = setTimeout(() => resolve('timeout'), limit);
+        timer = window.setTimeout(() => resolve('timeout'), limit);
       });
       const result = await Promise.race([service.ensure(), timedOut]);
-      clearTimeout(timer);
+      window.clearTimeout(timer);
       if (result === 'timeout') ctx.log.child('agy').warn(`agy entry / settings check still running after ${limit} ms; continuing in the background`);
     },
 
     unload() {
-      if (recheckTimer) clearTimeout(recheckTimer);
+      if (recheckTimer) window.clearTimeout(recheckTimer);
       recheckTimer = undefined;
       service = undefined;
     },
