@@ -132,8 +132,9 @@ npm run typecheck
 The plugin is listed in the [Obsidian Community directory](https://community.obsidian.md). Obsidian scans every
 release automatically (developer policies, code quality, known vulnerabilities, malware).
 
-1. Set the new version (`x.y.z`, no `v`) in `manifest.json` and `package.json`, and commit it to `main`.
-   The directory reads `manifest.json` from the default branch.
+1. Set the new version (`x.y.z`, no `v`) in `manifest.json` and `package.json`, add `"x.y.z": "<minAppVersion>"` to
+   `versions.json`, and commit it to `main`. The directory reads `manifest.json` from the default branch; Obsidian
+   uses `versions.json` to offer an older release to people whose Obsidian is too old for the latest one.
 2. Run `npm test` and `npm run build`.
 3. Create a GitHub release. Its tag must be exactly the version in `manifest.json` (for example `0.1.0`).
    Attach `dist/main.js`, `dist/manifest.json` and `dist/styles.css`.

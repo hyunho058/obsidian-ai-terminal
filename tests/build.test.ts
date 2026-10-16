@@ -114,6 +114,16 @@ describe('manifest (R2.10)', () => {
     expect(m.author).toBeTruthy();
   });
 
+  it('versions.json maps every release to its minAppVersion and lists the current version', () => {
+    const m = JSON.parse(readFileSync(join(ROOT, 'manifest.json'), 'utf8'));
+    const versions = JSON.parse(readFileSync(join(ROOT, 'versions.json'), 'utf8')) as Record<string, string>;
+    expect(versions[m.version]).toBe(m.minAppVersion);
+    for (const [version, minApp] of Object.entries(versions)) {
+      expect(version).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(minApp).toMatch(/^\d+\.\d+\.\d+$/);
+    }
+  });
+
   it('follows the Community directory rules for id, name, version and description', () => {
     const m = JSON.parse(readFileSync(join(ROOT, 'manifest.json'), 'utf8'));
     expect(m.id).toMatch(/^[a-z-]+$/);
