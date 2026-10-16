@@ -51,7 +51,7 @@ export class ConfirmCloseModal extends Modal {
     const buttons = contentEl.createDiv({ cls: 'modal-button-container' });
     this.stopButton = new ButtonComponent(buttons)
       .setButtonText('Stop and close')
-      .setWarning()
+      .setDestructive()
       .onClick(() => this.choose(true));
     this.cancelButton = new ButtonComponent(buttons).setButtonText('Cancel').onClick(() => this.choose(false));
     this.stopButton.buttonEl?.focus?.();
@@ -245,15 +245,15 @@ export class CloseFlow {
 
   private async stop(panelId: string): Promise<void> {
     const waitMs = this.options.stopWaitMs ?? STOP_WAIT_MS;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timer: number | undefined;
     const timeout = new Promise<'timeout'>((resolve) => {
-      timer = setTimeout(() => resolve('timeout'), waitMs);
+      timer = window.setTimeout(() => resolve('timeout'), waitMs);
     });
     try {
       const outcome = await Promise.race([this.options.sessions.stop(panelId, 'close').then(() => 'stopped' as const), timeout]);
       if (outcome === 'timeout') this.log.warn(`panel ${panelId}: program still running ${waitMs} ms after stop — closing anyway`);
     } finally {
-      if (timer) clearTimeout(timer);
+      if (timer) window.clearTimeout(timer);
     }
   }
 

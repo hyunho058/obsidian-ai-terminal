@@ -32,11 +32,11 @@ export type Waited<T> = { done: true; value: T } | { done: false };
 export function waitAtMost<T>(promise: Promise<T>, ms: number): Promise<Waited<T>> {
   const settled = promise.then((value): Waited<T> => ({ done: true, value }));
   if (!Number.isFinite(ms)) return settled;
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: number | undefined;
   const timeout = new Promise<Waited<T>>((resolve) => {
-    timer = setTimeout(() => resolve({ done: false }), Math.max(0, ms));
+    timer = window.setTimeout(() => resolve({ done: false }), Math.max(0, ms));
   });
-  return Promise.race([settled, timeout]).finally(() => clearTimeout(timer));
+  return Promise.race([settled, timeout]).finally(() => window.clearTimeout(timer));
 }
 
 /**

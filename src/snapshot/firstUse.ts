@@ -30,7 +30,7 @@ export class EnableSnapshotsModal extends Modal {
         'Before every message you send to Claude Code or Antigravity, AI Terminal saves a restore point of your notes ' +
         '(.md, .canvas, .base). It is stored outside the vault, in ~/.local/share/obsidian-ai-terminal.',
     });
-    contentEl.createEl('p', { text: 'Use "Restore notes from before an AI session…" to bring notes back. You can change this in Settings.' });
+    contentEl.createEl('p', { text: 'To bring notes back, run the command to restore notes from before an AI session. You can change this in settings.' });
     const buttons = contentEl.createDiv({ cls: 'modal-button-container' });
     this.enableButton = new ButtonComponent(buttons)
       .setButtonText('Enable')
@@ -95,17 +95,17 @@ export class FirstUsePrompt {
     if (this.pending) return this.pending;
     const answered = new Promise<FirstUseAnswer>((resolve) => {
       let done = false;
-      let timer: ReturnType<typeof setTimeout> | undefined;
+      let timer: number | undefined;
       const finish = (answer: FirstUseAnswer): void => {
         if (done) return;
         done = true;
-        if (timer) clearTimeout(timer);
+        if (timer) window.clearTimeout(timer);
         const h = this.handle;
         this.handle = null;
         resolve(answer);
         if (answer === 'dismiss') h?.close();
       };
-      timer = setTimeout(() => finish('dismiss'), this.opts.timeoutMs ?? FIRST_USE_TIMEOUT_MS);
+      timer = window.setTimeout(() => finish('dismiss'), this.opts.timeoutMs ?? FIRST_USE_TIMEOUT_MS);
       try {
         const h = this.opts.open(finish);
         if (!done) this.handle = h;

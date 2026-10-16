@@ -59,14 +59,14 @@ export async function readClaudeDiffTool(
       await handle?.close().catch(() => {});
     }
   };
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: number | undefined;
   const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), opts.timeoutMs ?? CONFIG_READ_TIMEOUT_MS);
+    timer = window.setTimeout(() => resolve(null), opts.timeoutMs ?? CONFIG_READ_TIMEOUT_MS);
   });
   try {
     return await Promise.race([read(), timeout]);
   } finally {
-    clearTimeout(timer);
+    window.clearTimeout(timer);
   }
 }
 

@@ -120,12 +120,12 @@ export class PluginRuntime {
     for (const mod of this.modules) {
       if (this.registered.has(mod) && mod.ready) tasks.push(track(mod.id, () => mod.ready!(this.ctx)));
     }
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timer: number | undefined;
     const timeout = new Promise<'timeout'>((resolve) => {
-      timer = setTimeout(() => resolve('timeout'), this.readyTimeoutMs);
+      timer = window.setTimeout(() => resolve('timeout'), this.readyTimeoutMs);
     });
     const outcome = await Promise.race([Promise.all(tasks).then(() => 'done' as const), timeout]);
-    if (timer) clearTimeout(timer);
+    if (timer) window.clearTimeout(timer);
     if (outcome === 'timeout') this.log.warn(`ready gate timed out after ${this.readyTimeoutMs} ms; still pending: ${[...pending].join(', ')}`);
     if (this.unloading) return;
     this.readyDone = true;

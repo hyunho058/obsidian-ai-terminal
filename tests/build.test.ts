@@ -109,7 +109,7 @@ describe('native module guard (R2.10)', () => {
 describe('manifest (R2.10)', () => {
   it('is desktop-only with the expected id', () => {
     const m = JSON.parse(readFileSync(join(ROOT, 'manifest.json'), 'utf8'));
-    expect(m).toMatchObject({ id: 'ai-terminal', name: 'AI Terminal', isDesktopOnly: true, minAppVersion: '1.8.0' });
+    expect(m).toMatchObject({ id: 'ai-terminal', name: 'AI Terminal', isDesktopOnly: true, minAppVersion: '1.13.0' });
     expect(m.description).toBeTruthy();
     expect(m.author).toBeTruthy();
   });

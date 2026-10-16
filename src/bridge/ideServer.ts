@@ -80,7 +80,7 @@ type Phase = 'stopped' | 'starting' | 'running';
 interface IdeClient {
   ws: WebSocket;
   initialized: boolean;
-  timers: Set<ReturnType<typeof setTimeout>>;
+  timers: Set<number>;
 }
 
 type JsonRpcId = string | number;
@@ -283,7 +283,7 @@ export class IdeServer {
 
   private dropClients(): void {
     for (const client of this.clients) {
-      for (const t of client.timers) clearTimeout(t);
+      for (const t of client.timers) window.clearTimeout(t);
       client.ws.terminate();
     }
     this.clients.clear();
@@ -335,7 +335,7 @@ export class IdeServer {
     ws.on('message', (data: RawData) => this.onMessage(client, data));
     ws.on('error', (err) => this.log.debug('IDE client error:', err.message));
     ws.on('close', () => {
-      for (const t of client.timers) clearTimeout(t);
+      for (const t of client.timers) window.clearTimeout(t);
       this.clients.delete(client);
       this.log.debug('IDE client disconnected');
     });
@@ -399,7 +399,7 @@ export class IdeServer {
       if (client.initialized) return;
       client.initialized = true;
       for (const delay of this.seedDelays) {
-        const timer = setTimeout(() => {
+        const timer = window.setTimeout(() => {
           client.timers.delete(timer);
           this.seed(client);
         }, delay);

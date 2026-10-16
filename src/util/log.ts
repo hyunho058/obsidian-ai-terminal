@@ -76,7 +76,7 @@ export function setDebugLogging(enabled: boolean): void {
 
 function readDebugFlag(): boolean {
   try {
-    return globalThis.localStorage?.getItem('obsidian-ai-terminal:debug') === '1';
+    return window.localStorage?.getItem('obsidian-ai-terminal:debug') === '1';
   } catch {
     return false;
   }

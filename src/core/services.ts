@@ -27,7 +27,7 @@ export class ServiceTimeoutError extends Error {
   }
 }
 
-type Waiter = { resolve: (value: unknown) => void; reject: (err: Error) => void; timer?: ReturnType<typeof setTimeout> };
+type Waiter = { resolve: (value: unknown) => void; reject: (err: Error) => void; timer?: number };
 
 /** Registry through which modules publish implementations to each other. */
 export class ServiceRegistry {
@@ -45,7 +45,7 @@ export class ServiceRegistry {
     if (waiters) {
       this.waiters.delete(key);
       for (const w of waiters) {
-        if (w.timer) clearTimeout(w.timer);
+        if (w.timer) window.clearTimeout(w.timer);
         w.resolve(impl);
       }
     }
@@ -82,7 +82,7 @@ export class ServiceRegistry {
       if (!set) this.waiters.set(key, (set = new Set()));
       set.add(waiter);
       if (timeoutMs !== undefined) {
-        waiter.timer = setTimeout(() => {
+        waiter.timer = window.setTimeout(() => {
           set?.delete(waiter);
           reject(new ServiceTimeoutError(key, timeoutMs));
         }, timeoutMs);
@@ -92,7 +92,7 @@ export class ServiceRegistry {
 
   /** Drops all services and cancels pending timers (plugin unload). Pending waiters never resolve. */
   clear(): void {
-    for (const set of this.waiters.values()) for (const w of set) if (w.timer) clearTimeout(w.timer);
+    for (const set of this.waiters.values()) for (const w of set) if (w.timer) window.clearTimeout(w.timer);
     this.waiters.clear();
     this.impls.clear();
   }

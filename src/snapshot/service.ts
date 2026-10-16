@@ -19,7 +19,7 @@ export interface SnapshotServiceOptions {
 const NESTED_KEY = Symbol.for('obsidian-ai-terminal.snapshot-nested-reported');
 
 function nestedReported(): Set<string> {
-  const g = globalThis as unknown as Record<symbol, Set<string> | undefined>;
+  const g = window as unknown as Record<symbol, Set<string> | undefined>;
   let set = g[NESTED_KEY];
   if (!set) g[NESTED_KEY] = set = new Set();
   return set;

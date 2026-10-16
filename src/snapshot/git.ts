@@ -67,7 +67,7 @@ interface Tracked {
 const REGISTRY_KEY = Symbol.for('obsidian-ai-terminal.snapshot-git');
 
 function registry(): Map<string, Set<Tracked>> {
-  const g = globalThis as unknown as Record<symbol, Map<string, Set<Tracked>> | undefined>;
+  const g = window as unknown as Record<symbol, Map<string, Set<Tracked>> | undefined>;
   let map = g[REGISTRY_KEY];
   if (!map) g[REGISTRY_KEY] = map = new Map();
   return map;
@@ -212,10 +212,10 @@ function exec(cmd: string, args: string[], env: NodeJS.ProcessEnv): Promise<{ ok
     const finish = (r: { ok: true; stdout: string } | { ok: false; error: string }): void => {
       if (done) return;
       done = true;
-      clearTimeout(timer);
+      window.clearTimeout(timer);
       resolve(r);
     };
-    const timer = setTimeout(() => finish({ ok: false, error: `no answer within ${PROBE_TIMEOUT_MS / 1000} s` }), PROBE_TIMEOUT_MS);
+    const timer = window.setTimeout(() => finish({ ok: false, error: `no answer within ${PROBE_TIMEOUT_MS / 1000} s` }), PROBE_TIMEOUT_MS);
     try {
       execFile(cmd, args, { env, encoding: 'utf8' }, (err, stdout) => {
         if (err) finish({ ok: false, error: (err as NodeJS.ErrnoException).code === 'ENOENT' ? 'not found' : err.message.split('\n')[0] ?? 'error' });

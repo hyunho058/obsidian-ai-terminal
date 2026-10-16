@@ -125,14 +125,14 @@ export function createResumeContributor(deps: ResumeDeps): SpawnContributor {
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`timed out after ${ms} ms`)), ms);
+    const timer = window.setTimeout(() => reject(new Error(`timed out after ${ms} ms`)), ms);
     promise.then(
       (v) => {
-        clearTimeout(timer);
+        window.clearTimeout(timer);
         resolve(v);
       },
       (e: unknown) => {
-        clearTimeout(timer);
+        window.clearTimeout(timer);
         reject(e instanceof Error ? e : new Error(String(e)));
       },
     );

@@ -49,7 +49,7 @@ interface PendingAttach {
   profile: ProfileId;
   /** The conversation id the attaching view has stored (its view state). */
   sessionId: string | undefined;
-  timer: ReturnType<typeof setTimeout>;
+  timer: number;
 }
 
 /** What a session needs from its registry. */
@@ -70,7 +70,7 @@ class Session implements SessionHandle {
   readonly label: string;
   sink: TerminalSink | null = null;
   readonly pending: PendingAttach[] = [];
-  graceTimer: ReturnType<typeof setTimeout> | undefined;
+  graceTimer: number | undefined;
   readonly mirror: TerminalMirror;
 
   private _state: SessionState = 'starting';
@@ -92,7 +92,7 @@ class Session implements SessionHandle {
   private disposed = false;
   private target: TerminalSize = { ...DEFAULT_SIZE };
   private applied: TerminalSize = { ...DEFAULT_SIZE };
-  private nudgeTimer: ReturnType<typeof setTimeout> | undefined;
+  private nudgeTimer: number | undefined;
 
   constructor(
     private readonly host: SessionHost,
@@ -298,7 +298,7 @@ class Session implements SessionHandle {
     if (this.disposed) return;
     this.disposed = true;
     this.gen++;
-    if (this.graceTimer) clearTimeout(this.graceTimer);
+    if (this.graceTimer) window.clearTimeout(this.graceTimer);
     this.graceTimer = undefined;
     this.cancelNudge();
     this.dataListener?.();
@@ -368,7 +368,7 @@ class Session implements SessionHandle {
     this.cancelNudge();
     const { cols, rows } = this.target;
     this.apply({ cols: cols > 2 ? cols - 1 : cols + 1, rows });
-    this.nudgeTimer = setTimeout(() => {
+    this.nudgeTimer = window.setTimeout(() => {
       this.nudgeTimer = undefined;
       if (!this.disposed && this.proc === proc) this.apply(this.target);
     }, this.host.nudgeDelayMs);
@@ -376,7 +376,7 @@ class Session implements SessionHandle {
 
   private cancelNudge(): void {
     if (this.nudgeTimer === undefined) return;
-    clearTimeout(this.nudgeTimer);
+    window.clearTimeout(this.nudgeTimer);
     this.nudgeTimer = undefined;
     if (!this.disposed) this.apply(this.target);
   }
@@ -432,12 +432,12 @@ class Session implements SessionHandle {
    */
   private announceStarted(proc: PtyProcess, phase: SpawnPhase): () => void {
     const payload = { ...this.base(), phase };
-    let timer: ReturnType<typeof setInterval> | undefined;
+    let timer: number | undefined;
     let done = false;
     const emit = (): void => {
       if (done) return;
       done = true;
-      if (timer) clearInterval(timer);
+      if (timer) window.clearInterval(timer);
       this.host.ctx.sessionEvents.emit('session:started', { ...payload, pid: proc.programPid ?? proc.pid });
     };
     if (proc.programPid !== undefined) {
@@ -445,7 +445,7 @@ class Session implements SessionHandle {
       return emit;
     }
     const deadline = Date.now() + PROGRAM_PID_WAIT_MS;
-    timer = setInterval(() => {
+    timer = window.setInterval(() => {
       if (proc.programPid !== undefined || proc.hasExited || Date.now() >= deadline) emit();
     }, 10);
     return emit;
@@ -555,7 +555,7 @@ export class SessionRegistry implements SessionsService {
       sink,
       profile: request.profile,
       sessionId: request.sessionId,
-      timer: setTimeout(() => this.resolveDuplicate(session, pending), this.duplicateWindowMs),
+      timer: window.setTimeout(() => this.resolveDuplicate(session, pending), this.duplicateWindowMs),
     };
     session.pending.push(pending);
     return 'pending';
@@ -566,7 +566,7 @@ export class SessionRegistry implements SessionsService {
     if (!session) return;
     const i = session.pending.findIndex((p) => p.sink === sink);
     if (i >= 0) {
-      clearTimeout(session.pending[i].timer);
+      window.clearTimeout(session.pending[i].timer);
       session.pending.splice(i, 1);
       return;
     }
@@ -576,7 +576,7 @@ export class SessionRegistry implements SessionsService {
     const next = session.pending.shift();
     if (next) {
       // The other view opened first and this one is closing: it was a move.
-      clearTimeout(next.timer);
+      window.clearTimeout(next.timer);
       this.takeOver(session, next.sink, next.sessionId);
       return;
     }
@@ -584,8 +584,8 @@ export class SessionRegistry implements SessionsService {
       this.remove(session);
       return;
     }
-    if (session.graceTimer) clearTimeout(session.graceTimer);
-    session.graceTimer = setTimeout(() => {
+    if (session.graceTimer) window.clearTimeout(session.graceTimer);
+    session.graceTimer = window.setTimeout(() => {
       session.graceTimer = undefined;
       if (!session.sink && this.sessions.get(panelId) === session) void this.stop(panelId, 'detached');
     }, this.graceMs);
@@ -650,7 +650,7 @@ export class SessionRegistry implements SessionsService {
    * its state (e.g. a resume picked a new id while the panel was moving), the view is told, so it persists the right id.
    */
   private takeOver(session: Session, sink: TerminalSink, viewSessionId: string | undefined): void {
-    if (session.graceTimer) clearTimeout(session.graceTimer);
+    if (session.graceTimer) window.clearTimeout(session.graceTimer);
     session.graceTimer = undefined;
     session.setSink(sink);
     if (session.sessionId !== viewSessionId) sink.identityChanged({ panelId: session.panelId, sessionId: session.sessionId });
@@ -675,7 +675,7 @@ export class SessionRegistry implements SessionsService {
   }
 
   private remove(session: Session): void {
-    for (const p of session.pending.splice(0)) clearTimeout(p.timer);
+    for (const p of session.pending.splice(0)) window.clearTimeout(p.timer);
     if (this.sessions.get(session.panelId) === session) this.sessions.delete(session.panelId);
     session.dispose();
     this.emitter.emit('removed', { panelId: session.panelId, profile: session.profile });
