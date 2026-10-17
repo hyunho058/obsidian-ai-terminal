@@ -29,11 +29,11 @@ Done when: the plugin is installed in the user's vault; from inside Obsidian the
 ## Research
 
 ### Project
-- Project directory is empty (no code, no `package.json`, not a git repo) — greenfield (`~/IdeaProjects/obsidian-terminal/`).
+- Project directory is empty (no code, no `package.json`, not a git repo) — greenfield.
 
 ### Host environment (macOS, arm64)
 - Obsidian app 1.14.4 (`~/Library/Application Support/obsidian/obsidian-1.14.4.asar`), installer 1.8.10, Electron 34.2.0 / Chrome 132 (`/Applications/Obsidian.app/.../Electron Framework`). Desktop plugins get Node.js `require` (`child_process`, `http`, `net`, `crypto`).
-- 4 vaults registered; open vault is `~/Documents/Notes` (`~/Library/Application Support/obsidian/obsidian.json`). Others: `~/Documents/Obsidian Vault`, iCloud `iCloud~md~obsidian/Documents`, and one in Google Drive.
+- Several vaults are registered (`~/Library/Application Support/obsidian/obsidian.json`), including ones in iCloud and Google Drive; the test vault is `~/Documents/MyVault`.
 - macOS privacy (TCC) blocked the current terminal session from listing any vault ("Operation not permitted"); processes spawned by Obsidian should inherit Obsidian's own folder access — must be confirmed in-app.
 - `claude` 2.1.290 and `agy` 1.2.17 are native Mach-O arm64 binaries in `~/.local/bin` — no Node needed to run them.
 - PATH: with a GUI-like minimal env (`PATH=/usr/bin:/bin`) `claude` is NOT found; via `zsh -lic` both `claude` and `agy` resolve. Obsidian launched from the Dock gets the minimal env.
@@ -44,7 +44,7 @@ Done when: the plugin is installed in the user's vault; from inside Obsidian the
 - Resize 100x30 → 120x40 via fd 3 caused a full redraw at the new width.
 - No native Node modules needed (avoids `node-pty` ABI rebuild against Electron 34).
 - `agy` probes terminal capabilities on start: DECRQM (`CSI ? 2026 $ p`), kitty keyboard protocol (`CSI > 1 u`), modifyOtherKeys (`CSI > 4 ; 2 m`); it falls back when unanswered.
-- Measured idle footprint: bridge ~15 MB / 0% CPU; `claude` ~200 MB; `agy` ~190 MB + 2 `npm` processes ~100 MB each (its configured stdio MCP servers `context7`, `sequential-thinking` via `npx`).
+- Measured idle footprint: bridge ~15 MB / 0% CPU; `claude` ~200 MB; `agy` ~190 MB + 2 `npm` processes ~100 MB each (its configured stdio MCP servers, started via `npx`).
 
 ### MCP / IDE integration surfaces
 - Claude Code: `claude mcp add` supports transports stdio / sse / http and scopes local / user / project; `--mcp-config <configs...>` loads MCP servers from JSON files or strings for one session; `--ide` auto-connects on startup if exactly one valid IDE is available (`claude --help`, `claude mcp --help`). `~/.claude/ide/` exists (empty — no IDE currently registered).
@@ -134,7 +134,7 @@ Done when: the plugin is installed in the user's vault; from inside Obsidian the
 
 ### D16: Target vault
 - **Status**: assumed
-- **Rationale**: Install and test in `~/Documents/Notes` (the open vault) first; nothing vault-specific is hard-coded, so it works in any vault.
+- **Rationale**: Install and test in the test vault `~/Documents/MyVault` first; nothing vault-specific is hard-coded, so it works in any vault.
 
 ### D17: macOS folder permission for spawned programs
 - **Status**: assumed
@@ -269,7 +269,7 @@ Done when: the plugin is installed in the user's vault; from inside Obsidian the
 **Covers**: Confirmed Goal, D16
 
 #### R0.1: "Open Claude Code" shows Claude Code's interactive UI in the vault folder
-- **Given**: the plugin is installed and enabled in the vault `~/Documents/Notes`
+- **Given**: the plugin is installed and enabled in the vault `~/Documents/MyVault`
 - **When**: the user runs the command "Open Claude Code"
 - **Then**: a terminal panel opens in the right sidebar showing Claude Code's interactive UI, and Claude Code's working directory is the vault root
 
@@ -317,7 +317,7 @@ Done when: the plugin is installed in the user's vault; from inside Obsidian the
 - **Then**: three panels exist, each with its own process, and typing in one does not affect the others
 
 #### R1.6: Shell panel starts in the vault root
-- **Given**: the vault path is `~/Documents/Notes`
+- **Given**: the vault path is `~/Documents/MyVault`
 - **When**: the user opens a shell panel and runs `pwd`
 - **Then**: the output is the vault's absolute path
 
@@ -909,7 +909,7 @@ Done when: the plugin is installed in the user's vault; from inside Obsidian the
 - **Then**: no token appears
 
 #### R15.2: Spawned programs can use the vault without a permission error
-- **Given**: Obsidian was launched from the Dock with the vault in `~/Documents/Notes`
+- **Given**: Obsidian was launched from the Dock with the vault in `~/Documents/MyVault`
 - **When**: a shell panel runs `ls` and Claude reads a note
 - **Then**: both succeed without "Operation not permitted" (or macOS shows a one-time permission prompt and they succeed after Allow)
 
@@ -928,7 +928,7 @@ Done when: the plugin is installed in the user's vault; from inside Obsidian the
 
 #### R16.2: Install script copies to a vault or explains the permission block
 - **Given**: a built `dist/`
-- **When**: the developer runs `npm run install-plugin -- ~/Documents/Notes`
+- **When**: the developer runs `npm run install-plugin -- ~/Documents/MyVault`
 - **Then**: the files are copied to `<vault>/.obsidian/plugins/obsidian-ai-terminal/`; on "Operation not permitted" it prints how to grant folder access or copy `dist/` in Finder
 
 ## Tasks
@@ -993,12 +993,12 @@ Done when: the plugin is installed in the user's vault; from inside Obsidian the
 ## External Dependencies
 
 ### Pre-work
-- Obsidian: in `~/Documents/Notes`, turn off Restricted mode (Settings › Community plugins) so a manually installed plugin can be enabled.
+- Obsidian: in `~/Documents/MyVault`, turn off Restricted mode (Settings › Community plugins) so a manually installed plugin can be enabled.
 - macOS: give the terminal app that runs Claude Code access to the vault folder (System Settings › Privacy & Security › Files and Folders, or Full Disk Access) so `npm run install-plugin` can copy into the vault — otherwise plan to copy `dist/` in Finder.
 - Antigravity: sign in once (`agy` reported "not signed in").
 - Recommended: back up the vaults (or let the plugin's first snapshot run) before the first AI session.
 
 ### Post-work
-- Install into `~/Documents/Notes`, enable "AI Terminal" in Community plugins, answer the snapshot prompt, and accept the Claude Code / Antigravity folder-trust prompts once.
+- Install into `~/Documents/MyVault`, enable "AI Terminal" in Community plugins, answer the snapshot prompt, and accept the Claude Code / Antigravity folder-trust prompts once.
 - Manual in-app verification of behaviors that need real Obsidian: R0.1–R0.4, R6.1–R6.3 (drag / popout moves), R7.2 (force-quit), R7.6 (Close all), R10.3 / R10.4 / R10.8 (IDE connection), R12.7 (agy Enter hold), R15.2 (macOS permission).
-- Optional: install into the other vaults (Obsidian Vault, iCloud, Google Drive).
+- Optional: install into other vaults (for example ones in iCloud or Google Drive).
