@@ -134,6 +134,7 @@ describe('manifest (R2.10)', () => {
     expect(m.description.length).toBeLessThanOrEqual(250);
     expect(m.description).toMatch(/\.$/);
     expect(m.description).not.toMatch(/^This is a plugin/i);
+    expect(m.description).not.toMatch(/obsidian/i);
     expect(m.fundingUrl).toBeUndefined();
   });
 
