@@ -15,12 +15,19 @@ export class FakeClipboard implements TerminalClipboard {
   /** Answer reads asynchronously (like `navigator.clipboard`). */
   async = false;
   writes: string[] = [];
+  /** Whether the clipboard holds an image. */
+  image = false;
+  hasImageCalls = 0;
   readText(): string | Promise<string> {
     return this.async ? Promise.resolve(this.text) : this.text;
   }
   writeText(text: string): void {
     this.text = text;
     this.writes.push(text);
+  }
+  hasImage(): boolean {
+    this.hasImageCalls++;
+    return this.image;
   }
 }
 

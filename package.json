@@ -1,6 +1,6 @@
 {
   "name": "obsidian-ai-terminal",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "description": "Obsidian desktop plugin: a terminal panel for Claude Code, Antigravity and a shell, with an Obsidian bridge.",
   "license": "MIT",

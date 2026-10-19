@@ -105,6 +105,11 @@ You need a test note, for example `X.md` with a few lines of text.
 21. **Send note path.** Open an Antigravity panel. Click into `X.md`, then run "Send note path to terminal" (Cmd+P).
     Expect: the Antigravity panel shows `@X.md` in its input box, the cursor is there, and nothing was sent yet.
     Type "summarize this note" and press Enter. Expect: the answer is about `X.md`.
+22. **Paste a screenshot.** Press Cmd+Ctrl+Shift+4 and drag over part of the screen; the screenshot goes to the clipboard.
+    Click into the Claude panel and press Cmd+V.
+    Expect: Claude shows `[Image #1]` in its input box. Ask "what is in this image?". Expect: the answer describes it.
+    Now copy a few words of text and press Cmd+V. Expect: the text is pasted, not an image.
+    In a Shell panel, take another screenshot and press Cmd+V. Expect: nothing happens, and your next key types normally.
 
 ## Development
 
