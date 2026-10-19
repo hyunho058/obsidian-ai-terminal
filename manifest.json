@@ -1,7 +1,7 @@
 {
   "id": "ai-terminal",
   "name": "AI Terminal",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "minAppVersion": "1.13.0",
   "description": "Run Claude Code, Antigravity and a shell in terminal panels, with tools that let the AI read the open note and selection.",
   "author": "hyunhokim",
