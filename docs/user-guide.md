@@ -59,7 +59,7 @@ The panel stays open and shows `[Process exited with code 0 — press Enter to r
   | Keys | Action |
   | --- | --- |
   | Cmd+C | copy the selected terminal text |
-  | Cmd+V | paste |
+  | Cmd+V | paste. In Claude Code and Antigravity panels, an image on the clipboard (for example a screenshot) is attached. If both text and an image are on the clipboard, the text is pasted |
   | Cmd+A | select all terminal text |
   | Cmd+K | clear the screen and the history |
   | Cmd+← / Cmd+→ | go to the start / end of the line |

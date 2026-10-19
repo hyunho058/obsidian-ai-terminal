@@ -76,6 +76,7 @@ Open `.obsidian`, and make a folder named `plugins` in it if there is none.
 | Point the AI at a note | Click into the note, press Cmd+P and run "Send note path to terminal". The note's path appears in the panel. Add your question and press Enter |
 | Start a new line without sending (Claude) | Shift+Enter |
 | Copy / paste | Cmd+C / Cmd+V |
+| Paste a screenshot (Claude Code, Antigravity) | Copy the image, then Cmd+V in the panel. Cmd+V also attaches a clipboard image there; text on the clipboard wins. The Shell panel pastes text only |
 | Undo what the AI changed | See [Undo AI changes](#undo-ai-changes) |
 
 Panels work like normal Obsidian tabs: you can drag them, split them or move them to another window, and the AI

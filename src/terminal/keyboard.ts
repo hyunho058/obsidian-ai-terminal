@@ -18,6 +18,8 @@ export const KEY_SEQUENCES = {
   wordRight: '\x1bf',
   /** Shift+Enter — ESC CR, a newline inside Claude Code's prompt. */
   newline: '\x1b\r',
+  /** Cmd+V with an image on the clipboard — Ctrl+V, the AI CLIs read the image themselves. */
+  pasteImage: '\x16',
 } as const;
 
 /** The terminal's own Cmd shortcuts; every other Cmd shortcut belongs to Obsidian (R4.2). */
@@ -27,6 +29,8 @@ export type TerminalCmdAction = 'copy' | 'paste' | 'select-all' | 'clear' | 'lin
 export interface TerminalClipboard {
   readText(): string | Promise<string>;
   writeText(text: string): void | Promise<void>;
+  /** Whether the clipboard holds an image. Absent (the web clipboard) means "no image". */
+  hasImage?(): boolean;
 }
 
 export interface KeyRouterOptions {
@@ -160,8 +164,13 @@ export function createKeyRouter(options: KeyRouterOptions): KeyHandler {
     const term = panel.terminal;
     if (!term) return;
     // xterm's paste path adds the bracketed-paste markers when the program enabled them (R4.3).
+    // No text but an image: the AI CLIs read the clipboard image themselves on Ctrl+V; a shell gets nothing.
     const deliver = (text: string): void => {
-      if (text && panel.terminal === term) term.paste(text);
+      if (panel.terminal !== term) return;
+      if (text) term.paste(text);
+      else if ((panel.profile === 'claude' || panel.profile === 'agy') && clipboard.hasImage?.()) {
+        typeInto(panel, KEY_SEQUENCES.pasteImage);
+      }
     };
     try {
       const text = clipboard.readText();
@@ -292,9 +301,10 @@ export function createTerminalScope(parent: Scope | undefined, owns: (event: Key
   return scope;
 }
 
-interface ElectronClipboard {
+export interface ElectronClipboard {
   readText(): string;
   writeText(text: string): void;
+  availableFormats(): string[];
 }
 
 function electronClipboard(): ElectronClipboard | null {
@@ -309,10 +319,25 @@ function electronClipboard(): ElectronClipboard | null {
   }
 }
 
+/** Wraps Electron's clipboard; `hasImage` checks the format list only, so it never decodes the bitmap (D4). */
+export function clipboardFromElectron(electron: ElectronClipboard): TerminalClipboard {
+  return {
+    readText: () => electron.readText(),
+    writeText: (text) => electron.writeText(text),
+    hasImage: () => {
+      try {
+        return electron.availableFormats().some((f) => f.startsWith('image/'));
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
 /** Electron's synchronous clipboard in Obsidian; the async web clipboard elsewhere. */
 export function createClipboard(): TerminalClipboard {
   const electron = electronClipboard();
-  if (electron) return { readText: () => electron.readText(), writeText: (text) => electron.writeText(text) };
+  if (electron) return clipboardFromElectron(electron);
   return {
     readText: () => navigator.clipboard.readText(),
     writeText: (text) => navigator.clipboard.writeText(text),
