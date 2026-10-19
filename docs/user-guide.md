@@ -74,8 +74,10 @@ The panel stays open and shows `[Process exited with code 0 — press Enter to r
 Settings › AI Terminal: placement; the command and arguments of each profile (for example `--model sonnet`);
 Python path; font; scrollback; Option as Meta; the bridge switches; snapshots.
 
-**Terminal colors**: "Follow Obsidian theme" (default), "Dark (black background)" or "Light (white background)".
+**Terminal colors**: "Follow Obsidian theme" (default), "Dark (black background)", "Light (white background)",
+"Solarized Dark" or "Solarized Light".
 The change shows at once in open panels.
+Claude Code and Antigravity draw some colors themselves, so those keep their own theme (in Claude Code, use `/theme`).
 
 ## The Obsidian bridge
 
