@@ -115,11 +115,10 @@ export function buildTheme(read: CssVarReader, dark: boolean): ITheme {
 }
 
 /**
- * Solarized palettes from shaunsingh/solarized.nvim (`lua/solarized/colors.lua`, the standard Solarized hex values).
- * Departures from the plugin's terminal mapping: the foreground is Solarized's own (base0 on dark, base00 on light;
- * the plugin swaps them), yellow and magenta stay in their ANSI slots, bright = normal hue so bold text (drawn in
- * bright colors) keeps its hue, the gray text slots keep at least 3:1 contrast with the background, and the dark
- * selection is base1 at 25% because the plugin's selection color is unreadable under dark-mode text.
+ * Solarized palettes by Ethan Schoonover (https://github.com/altercation/solarized, MIT).
+ * The foreground is Solarized's own (base0 on dark, base00 on light), yellow and magenta stay in their ANSI slots,
+ * bright = normal hue so bold text (drawn in bright colors) keeps its hue, the gray text slots keep at least 3:1
+ * contrast with the background, and the dark selection is base1 at 25% so selected text stays readable.
  */
 const SOLARIZED: Record<'dark' | 'light', Palette> = {
   dark: {
