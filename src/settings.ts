@@ -12,13 +12,18 @@ import type { Disposer } from './core/types';
 
 export type Placement = 'right-sidebar' | 'new-tab' | 'split-below';
 
-/** Terminal color mode: follow the Obsidian theme, or a fixed dark (black background) / light palette. */
-export type TerminalColors = 'obsidian' | 'dark' | 'light';
+/**
+ * Terminal color mode: follow the Obsidian theme, or a fixed palette — dark (black background), light, or Solarized
+ * dark / light.
+ */
+export type TerminalColors = 'obsidian' | 'dark' | 'light' | 'solarized-dark' | 'solarized-light';
 
 export const TERMINAL_COLOR_LABELS: Readonly<Record<TerminalColors, string>> = {
   obsidian: 'Follow Obsidian theme',
   dark: 'Dark (black background)',
   light: 'Light (white background)',
+  'solarized-dark': 'Solarized Dark',
+  'solarized-light': 'Solarized Light',
 };
 
 export const PLACEMENT_LABELS: Readonly<Record<Placement, string>> = {

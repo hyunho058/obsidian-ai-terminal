@@ -115,10 +115,69 @@ export function buildTheme(read: CssVarReader, dark: boolean): ITheme {
 }
 
 /**
- * A fixed palette that ignores the Obsidian theme: Obsidian's default dark colors on a pure black background, or its
- * default light colors on white.
+ * Solarized palettes by Ethan Schoonover (https://github.com/altercation/solarized, MIT).
+ * The foreground is Solarized's own (base0 on dark, base00 on light), yellow and magenta stay in their ANSI slots,
+ * bright = normal hue so bold text (drawn in bright colors) keeps its hue, the gray text slots keep at least 3:1
+ * contrast with the background, and the dark selection is base1 at 25% so selected text stays readable.
  */
-export function buildFixedTheme(mode: 'dark' | 'light'): ITheme {
+const SOLARIZED: Record<'dark' | 'light', Palette> = {
+  dark: {
+    background: '#002b36',
+    foreground: '#839496',
+    cursor: '#268bd2',
+    cursorAccent: '#002b36',
+    selectionBackground: 'rgba(147, 161, 161, 0.25)',
+    black: '#073642',
+    red: '#dc322f',
+    green: '#859900',
+    yellow: '#b58900',
+    blue: '#268bd2',
+    magenta: '#d33682',
+    cyan: '#2aa198',
+    white: '#eee8d5',
+    brightBlack: '#657b83',
+    brightRed: '#dc322f',
+    brightGreen: '#859900',
+    brightYellow: '#b58900',
+    brightBlue: '#268bd2',
+    brightMagenta: '#d33682',
+    brightCyan: '#2aa198',
+    brightWhite: '#fdf6e3',
+  },
+  light: {
+    background: '#fdf6e3',
+    foreground: '#657b83',
+    cursor: '#268bd2',
+    cursorAccent: '#fdf6e3',
+    selectionBackground: '#d3cfc1',
+    black: '#073642',
+    red: '#dc322f',
+    green: '#859900',
+    yellow: '#b58900',
+    blue: '#268bd2',
+    magenta: '#d33682',
+    cyan: '#2aa198',
+    white: '#657b83',
+    brightBlack: '#586e75',
+    brightRed: '#dc322f',
+    brightGreen: '#859900',
+    brightYellow: '#b58900',
+    brightBlue: '#268bd2',
+    brightMagenta: '#d33682',
+    brightCyan: '#2aa198',
+    brightWhite: '#586e75',
+  },
+};
+
+/**
+ * A fixed palette that ignores the Obsidian theme: Obsidian's default dark colors on a pure black background, its
+ * default light colors on white, or Solarized dark / light.
+ */
+export function buildFixedTheme(mode: Exclude<TerminalColors, 'obsidian'>): ITheme {
+  if (mode === 'solarized-dark' || mode === 'solarized-light') {
+    const palette = SOLARIZED[mode === 'solarized-dark' ? 'dark' : 'light'];
+    return { ...palette, selectionInactiveBackground: palette.selectionBackground };
+  }
   const theme = buildTheme(() => '', mode === 'dark');
   if (mode === 'dark') return { ...theme, background: '#000000', cursorAccent: '#000000' };
   return theme;

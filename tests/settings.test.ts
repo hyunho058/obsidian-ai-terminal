@@ -201,7 +201,13 @@ describe('AiTerminalSettingTab (R14.1, R14.2)', () => {
     expect((byName('Antigravity bridge') as ToggleComponent).getValue()).toBe(true);
     expect((byName('AI session snapshots') as DropdownComponent).getValue()).toBe('ask');
     expect((byName('Terminal colors') as DropdownComponent).getValue()).toBe('obsidian');
-    expect(Object.keys((byName('Terminal colors') as DropdownComponent).options)).toEqual(['obsidian', 'dark', 'light']);
+    expect(Object.keys((byName('Terminal colors') as DropdownComponent).options)).toEqual([
+      'obsidian',
+      'dark',
+      'light',
+      'solarized-dark',
+      'solarized-light',
+    ]);
   });
 
   it('Terminal colors: choosing Dark is saved; an unknown stored value falls back to following Obsidian', async () => {
