@@ -1,14 +1,25 @@
 # AI Terminal for Obsidian
 
-Use AI assistants like **Claude Code** and **Antigravity** inside Obsidian, right next to your notes.
+Chat with an AI assistant (**Claude Code** or **Antigravity**) inside Obsidian, right next to your notes. The AI
+can read your notes and edit them for you.
 
 > **Note**: **macOS only** (Obsidian desktop v1.13+). Windows, Linux, and mobile devices (iOS/Android) are not supported.
 
 ## What is this?
 
-AI Terminal adds terminal panels to Obsidian for two AI coding assistants, Claude Code (Anthropic) and
-Antigravity (Google), and for a normal shell. The assistants start in the vault folder, so they can read and edit
-the notes directly.
+[Obsidian](https://obsidian.md) is a free note-taking app. AI Terminal is a **plugin**, a small add-on that gives
+Obsidian a new feature: a chat panel where you talk to an AI about your notes.
+
+You type a request in plain words, and the AI does it in your notes. For example:
+
+- "Summarize the note I have open in five bullet points."
+- "Make 10 quiz questions from my Biology lecture notes."
+- "Fix the spelling and grammar in the selected text."
+- "Find every note that mentions the French Revolution and make a list of links."
+- "Turn this messy list into a table."
+
+You do not need to know how to program. The panel looks like a "terminal" (a black window with text), but you
+just type normal sentences and press Enter.
 
 Features:
 
@@ -16,56 +27,100 @@ Features:
 - **Context from the editor.** The AI can see the open note and the selected text.
 - **Live updates.** Notes the AI edits change in Obsidian right away.
 - **Paste screenshots.** Press Cmd+V to attach a screenshot to Claude Code or Antigravity.
-- **Undo for AI changes.** A copy of the notes is saved before each message to the AI, so changes can be undone.
+- **Undo for AI changes.** A copy of your notes is saved before each message to the AI, so you can undo its changes.
 
-## What you need
+### Words you will see
 
-- A **Mac** with the **Obsidian desktop app**, version 1.13 or newer. Windows, Linux and mobile devices (iOS/Android) are not supported.
-- **Claude Code** or the **Antigravity CLI** (or both), and an account for it. Claude Code needs a paid Claude plan
-  (Pro or Max) or Anthropic API credits:
-  - Claude Code: [install guide](https://code.claude.com/docs/en/setup)
-  - Antigravity CLI: [install guide](https://antigravity.google/product/antigravity-cli)
-- **Apple's command line tools.** The plugin needs Python and git, which come with them. Open the **Terminal** app,
-  paste this line and press Enter:
+| Word | What it means |
+| --- | --- |
+| **Vault** | The folder where Obsidian keeps your notes. |
+| **Plugin** | An add-on that gives Obsidian new features. This is one. |
+| **Terminal** | A Mac app (in Applications › Utilities) where you type commands. You need it a few times during setup. |
+| **Claude Code** | An AI assistant made by Anthropic. |
+| **Antigravity** | An AI assistant made by Google. Its command is `agy`. |
+| **Shell** | A plain terminal, without AI. You do not need it to use the AI. |
 
-  ```sh
-  xcode-select --install
-  ```
+You only need **one** of the two AI assistants. Pick whichever you have an account for.
 
-  Then follow the window that opens. If it says the tools are already installed, you are done.
+## Before you start
 
-To check that the AI is ready, type `claude --version` (or `agy --version`) in Terminal and press Enter. You should
-see a version number.
+You need:
 
-## Install
+1. **A Mac** with the **Obsidian desktop app**, version 1.13 or newer.
+   To check: in Obsidian, open **Settings › About**.
+2. **An account for one AI assistant.**
+   - **Claude Code** needs a paid Claude plan (Pro or Max) or Anthropic API credits. The free Claude plan does not work.
+   - **Antigravity** needs a Google account.
+3. **About 15 minutes** for the setup below.
+
+The plugin itself is free. Any cost comes from the AI company's plan.
+
+## Setup
+
+### Step 1: Install Apple's command line tools
+
+The plugin needs two small programs (Python and git) that come with Apple's command line tools.
+
+1. Open the **Terminal** app. (Press Cmd+Space, type `Terminal`, press Enter.)
+2. Copy this line, paste it into Terminal and press Enter:
+
+   ```sh
+   xcode-select --install
+   ```
+
+3. A window opens. Click **Install** and wait until it is done (a few minutes).
+   If Terminal says the tools are **already installed**, that is fine. Go to step 2.
+
+### Step 2: Install an AI assistant
+
+Install **one** of these (or both), using its official guide:
+
+- **Claude Code**: [install guide](https://code.claude.com/docs/en/setup)
+- **Antigravity CLI**: [install guide](https://antigravity.google/product/antigravity-cli)
+
+The guide gives you a line to paste into Terminal, like in step 1.
+
+To check that it worked, type this in Terminal and press Enter:
+
+```sh
+claude --version
+```
+
+(For Antigravity, type `agy --version`.) You should see a version number, such as `2.1.0`.
+If you see "command not found", close Terminal, open it again and try once more.
+
+### Step 3: Install the plugin
 
 **From Obsidian** (once AI Terminal is in the community plugin list):
 
-1. Open **Settings › Community plugins**. If **Restricted mode** is on, turn it off.
+1. In Obsidian, open **Settings › Community plugins**. If **Restricted mode** is on, turn it off.
 2. Click **Browse**, search for **AI Terminal**, click **Install**, then **Enable**.
 
-**By hand** (before that, or to pick a version):
+**By hand** (works now, without the community list):
 
-1. Open the [latest release](https://github.com/hyunho058/obsidian-ai-terminal/releases/latest) and download
-   `main.js`, `manifest.json` and `styles.css`.
+1. Open the [latest release](https://github.com/hyunho058/obsidian-ai-terminal/releases/latest). Under **Assets**,
+   download these three files: `main.js`, `manifest.json` and `styles.css`.
 2. In Obsidian, open **Settings › Community plugins**. If **Restricted mode** is on, turn it off.
 3. Next to **Installed plugins**, click the **folder icon**. Finder opens the plugins folder of your vault.
-4. In that folder, make a new folder named `ai-terminal` and put the three files in it.
+4. In that folder, make a new folder named `ai-terminal` and move the three files into it.
 5. Back in Obsidian, click the **reload icon** next to **Installed plugins**. Then turn on **AI Terminal**.
 
-If step 3 does not open a folder: open your vault folder in Finder and press Cmd+Shift+. to show hidden folders.
-Open `.obsidian`, and make a folder named `plugins` in it if there is none.
+If step 3 does not open a folder: open your vault folder in Finder and press Cmd+Shift+. (period) to show hidden
+folders. Open `.obsidian`, and make a folder named `plugins` in it if there is none. Then continue with step 4
+inside `plugins`.
 
-## First start
+### Step 4: First start
 
-1. Click the **terminal icon** in the left ribbon and pick **Claude Code** (or Antigravity, or Shell).
-   A panel opens on the right.
+1. Click the **terminal icon** in the left ribbon (the thin bar of icons on the far left) and pick
+   **Claude Code** (or **Antigravity**). A panel opens on the right.
 2. The first time, you see a few questions:
    - "Enable AI session snapshots for this vault?" → click **Enable**. This turns on undo for AI changes.
+   - The AI asks you to sign in → follow the steps. A browser window may open.
    - The AI asks if you trust the folder → choose **Yes**.
    - macOS asks "“Obsidian” would like to access files in …" → click **Allow**.
-   - Antigravity may ask you to sign in with Google.
-3. Type your question in the panel and press Enter.
+3. Type your question in the panel and press Enter. That's it.
+
+When the AI wants to change a file, it may ask first. Read the question and pick **Yes** or **No**.
 
 ## How to use
 
@@ -85,6 +140,8 @@ keeps running. When you restart Obsidian, the panels come back (Claude resumes e
 
 ### Undo AI changes
 
+Did the AI change something you did not want? You can go back.
+
 1. Press Cmd+P and run **"Restore notes from before an AI session…"**.
 2. Pick a time from the list. It shows when it was, which AI, and the start of your message.
 3. You see the notes that changed. Untick any note you changed yourself and want to keep.
@@ -100,7 +157,7 @@ They stay on your Mac, outside the vault.
 - **Do not type in a note while the AI is editing it.** One of the two changes can be lost. Keep Obsidian's
   **File Recovery** on (Settings › Core plugins). It keeps older versions of each note.
 - **Your notes go to the AI company.** Notes and text the AI reads are sent to Anthropic (Claude Code) or
-  Google (Antigravity), like everything else you send to these tools.
+  Google (Antigravity), like everything else you send to these tools. Do not use it on notes you must keep private.
 - **Read the AI's permission questions.** The AI can also change files that snapshots do not cover
   (images, settings, files outside the vault).
 - **Snapshot history restarts after a vault move.** Moving or renaming the vault folder starts a new, empty history.
@@ -115,8 +172,8 @@ They stay on your Mac, outside the vault.
 - **"Command not found: claude"**: Obsidian cannot find the AI program. In Terminal, run `which claude`
   (or `which agy`). Copy the path it prints, for example `/Users/you/.local/bin/claude`, into
   Settings › AI Terminal › Profiles › "Claude Code command" (or "Antigravity command").
-- **"Python 3 not found"**: install Apple's command line tools (see [What you need](#what-you-need)). If you already
-  have Python 3, put its path (from `which python3`) into Settings › AI Terminal › Terminal › "Python path".
+- **"Python 3 not found"**: install Apple's command line tools (see [Step 1](#step-1-install-apples-command-line-tools)).
+  If you already have Python 3, put its path (from `which python3`) into Settings › AI Terminal › Terminal › "Python path".
 - **macOS blocked access** ("Operation not permitted"): open System Settings › Privacy & Security ›
   Files and Folders › Obsidian and turn on the folder of your vault. Then open a new panel.
 - **A message says "Reload the plugin"**: in Settings › Community plugins, turn **AI Terminal** off, then on again.
@@ -125,6 +182,23 @@ They stay on your Mac, outside the vault.
   or run "Send note path to terminal".
 
 For more, see [Troubleshooting](docs/user-guide.md#troubleshooting) in the user guide.
+
+## Questions
+
+**Does it cost money?** The plugin is free. Claude Code needs a paid Claude plan or API credits. Antigravity needs
+a Google account; see Google's page for its limits.
+
+**Does it work on Windows, iPhone or iPad?** No, only on a Mac.
+
+**Do I need to know how to code?** No. You only paste a few lines into Terminal during setup. After that, you type
+normal sentences.
+
+**Can the AI break my notes?** It can change or delete notes when you ask it to, or when it misunderstands you.
+That is why it saves a copy before each message (see [Undo AI changes](#undo-ai-changes)), and why it asks before
+many changes.
+
+**How do I remove it?** In Settings › Community plugins, click the trash icon next to AI Terminal. If you used
+Antigravity, also see "Clean up after you uninstall" under [Safety](#safety).
 
 ## What the plugin uses and accesses
 
