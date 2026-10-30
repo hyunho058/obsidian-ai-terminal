@@ -124,6 +124,30 @@ When the AI wants to change a file, it may ask first. Read the question and pick
 
 ## How to use
 
+### Your first request
+
+Try this once to see how it works:
+
+1. In Obsidian, open a note, for example your lecture notes.
+2. Click the **terminal icon** in the left ribbon and pick **Claude Code** (or **Antigravity**).
+   The panel opens on the right, next to your note.
+3. Click into the panel, type this and press Enter:
+
+   ```text
+   Add a summary of 5 bullet points at the top of the note I have open
+   ```
+
+4. The AI reads your note and tells you what it plans to do. Before it changes the note, it asks for permission.
+   Read the question and pick **Yes** (or **No** to stop).
+5. The summary appears in your note right away.
+6. Not happy with it? Type a follow-up in the panel, such as "make it shorter", or put the note back with
+   [Undo AI changes](#undo-ai-changes).
+
+You can keep talking in the same panel. The AI remembers the conversation, so you can say "now do the same for
+the selected text" without explaining again.
+
+### Everyday tasks
+
 | To do this | Do this |
 | --- | --- |
 | Open an AI panel | Click the terminal icon on the left, or press Cmd+P and type "AI Terminal" |
